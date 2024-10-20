@@ -1,0 +1,18 @@
+# Ignore compiled executables
+twmailer-client
+twmailer-server
+
+# Ignore object files
+*.o
+
+# Ignore mail spool directory
+mail_spool/
+
+# Ignore macOS system files
+.DS_Store
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore any log files
+*.log
