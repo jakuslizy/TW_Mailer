@@ -16,3 +16,20 @@ mail_spool/
 
 # Ignore any log files
 *.log
+
+# Ignore IntelliJ IDEA files
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Ignore Eclipse files
+.classpath
+.project
+.settings/
+
+# Ignore Visual Studio files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
