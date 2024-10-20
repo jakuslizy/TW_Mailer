@@ -33,7 +33,7 @@ To start the server, use the following command:
 
 Example:
 
-`./twmailer-server 8080 ./mail_spool
+`./twmailer-server 8080 ./mail_spool`
 
 - `<port>`: The port number on which the server will listen
 - `<mail-spool-directoryname>`: The directory where messages will be stored
