@@ -17,9 +17,9 @@
 namespace fs = std::filesystem;
 
 // LDAP Konfiguration für Technikum Wien
-#define LDAP_URI "ldap://ldap.technikum-wien.at"
+#define LDAP_URI "ldap://ldap.technikum-wien.at:389"
 #define LDAP_PORT 389
-#define LDAP_BASEDN "dc=technikum-wien,dc=at"
+#define LDAP_BASEDN "ou=people,dc=technikum-wien,dc=at"
 
 class TwMailerServer {
 private:
@@ -270,7 +270,7 @@ private:
 
         fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
         if (!fs::exists(inbox_path)) {
-            std::string error_msg = "ERR\nKeine Nachrichten vorhanden.\n";
+            std::string error_msg = "ERR\nKeine Nachrichten vorhanden\n.\n";
             send(client_sock, error_msg.c_str(), error_msg.length(), 0);
             std::cout << "Error: Empty list sent for user " << current_user << std::endl;
             return;
@@ -289,12 +289,14 @@ private:
         }
 
         std::stringstream ss;
-        ss << "OK\n" << subjects.size() << "\n";
+        ss << subjects.size() << "\n";
         for (const auto& subject : subjects) {
             ss << subject << "\n";
         }
+        ss << ".\n";
 
-        send(client_sock, ss.str().c_str(), ss.str().length(), 0);
+        std::string response = "OK\n" + ss.str();
+        send(client_sock, response.c_str(), response.length(), 0);
         std::cout << "OK: List of messages for user " << current_user << " sent." << std::endl;
     }
 
@@ -343,28 +345,34 @@ private:
         LDAP* ld;
         int rc;
         
-        // LDAP initialisieren
+        std::cout << "Versuche LDAP-Verbindung zu: " << LDAP_URI << std::endl;
+        
         rc = ldap_initialize(&ld, LDAP_URI);
         if (rc != LDAP_SUCCESS) {
             std::cerr << "LDAP init failed: " << ldap_err2string(rc) << std::endl;
             return false;
         }
 
-        // LDAP Version setzen
+        std::cout << "LDAP initialisiert" << std::endl;
+
         int version = LDAP_VERSION3;
         ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
 
-        // Bind mit Benutzeranmeldeinformationen
         struct berval cred;
         cred.bv_val = (char*)password.c_str();
         cred.bv_len = password.length();
         
-        std::string userdn = "uid=" + username + ",dc=technikum-wien,dc=at";
+        std::string userdn = "uid=" + username + ",ou=people,dc=technikum-wien,dc=at";
+        std::cout << "Versuche Bind mit DN: " << userdn << std::endl;
+        
         rc = ldap_sasl_bind_s(ld, userdn.c_str(), LDAP_SASL_SIMPLE, &cred,
                              nullptr, nullptr, nullptr);
 
+        if (rc != LDAP_SUCCESS) {
+            std::cerr << "LDAP bind failed: " << ldap_err2string(rc) << std::endl;
+        }
+
         bool success = (rc == LDAP_SUCCESS);
-        
         ldap_unbind_ext_s(ld, nullptr, nullptr);
         return success;
     }

@@ -152,7 +152,7 @@ public:
         if (!checkLogin()) return;
 
         try {
-            safeSend("LIST\n");
+            safeSend("LIST\n.\n");
             std::string response = safeRead();
             std::cout << "Ihre Nachrichten:\n" << response;
         } catch (const std::exception& e) {
