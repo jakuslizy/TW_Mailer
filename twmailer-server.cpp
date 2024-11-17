@@ -221,43 +221,46 @@ private:
     // Function to handle the SEND command
     // It reads the sender, receiver, subject, and content from the client
     void handleSend(std::istringstream& iss) {
-        std::string sender, receiver, subject, line; // Variables to store the sender, receiver, subject, and content
-        std::getline(iss, sender); // Get the sender
-        std::getline(iss, receiver); // Get the receiver
-        std::getline(iss, subject); // Get the subject
+        if (!is_authenticated) {
+            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+            return;
+        }
 
-        std::cout << "Sending message from " << sender << " to " << receiver << std::endl; // Print the sender and receiver
-        std::cout << "Subject: " << subject << std::endl; // Print the subject
+        std::string receiver, subject, line;
+        std::getline(iss, receiver);
+        std::getline(iss, subject);
 
-        fs::path inbox_path = fs::path(mail_spool_dir) / receiver; // Path to the receiver's inbox
-        fs::create_directories(inbox_path); // Create the inbox directory if it doesn't exist
+        std::cout << "Sending message from " << current_user << " to " << receiver << std::endl;
+        std::cout << "Subject: " << subject << std::endl;
 
-        int message_number = 1; // Message number
+        // Erstelle Benutzerverzeichnis für den Empfänger
+        fs::path inbox_path = fs::path(mail_spool_dir) / receiver;
+        fs::create_directories(inbox_path);
+
+        // Finde die nächste freie Nachrichtennummer
+        int message_number = 1;
         while (fs::exists(inbox_path / (std::to_string(message_number) + ".txt"))) {
             message_number++;
         }
 
-        std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt")); // Open the message file
+        // Speichere die Nachricht im Verzeichnis des Empfängers
+        std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
         if (!outfile) {
             std::cout << "Error creating message file." << std::endl;
             send(client_sock, "ERR\n", 4, 0);
             return;
         }
 
-        outfile << "From: " << sender << std::endl;
-        outfile << "To: " << receiver << std::endl; 
-        outfile << "Subject: " << subject << std::endl << std::endl; 
+        outfile << "From: " << current_user << std::endl;
+        outfile << "To: " << receiver << std::endl;
+        outfile << "Subject: " << subject << std::endl << std::endl;
 
-        // Write the content 
         while (std::getline(iss, line) && line != ".") {
-            outfile << line << std::endl; 
+            outfile << line << std::endl;
         }
 
-        outfile.close(); // Close the message file
-
-        std::cout << "Message successfully saved." << std::endl;
+        outfile.close();
         send(client_sock, "OK\n", 3, 0);
-        std::cout << "Response 'OK' sent to client." << std::endl;
     }
 
     // Function to handle the LIST command
@@ -268,15 +271,16 @@ private:
             return;
         }
 
+        // Benutzerverzeichnis überprüfen
         fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
-        if (!fs::exists(inbox_path)) {
+        if (!fs::exists(inbox_path) || fs::is_empty(inbox_path)) {
             std::string error_msg = "ERR\nKeine Nachrichten vorhanden\n.\n";
             send(client_sock, error_msg.c_str(), error_msg.length(), 0);
-            std::cout << "Error: Empty list sent for user " << current_user << std::endl;
             return;
         }
 
         std::vector<std::string> subjects;
+        // Durchsuche alle Dateien im Benutzerverzeichnis
         for (const auto& entry : fs::directory_iterator(inbox_path)) {
             std::ifstream infile(entry.path());
             std::string line;
@@ -289,15 +293,14 @@ private:
         }
 
         std::stringstream ss;
-        ss << subjects.size() << "\n";
+        ss << "OK\n" << subjects.size() << "\n";
         for (const auto& subject : subjects) {
             ss << subject << "\n";
         }
         ss << ".\n";
 
-        std::string response = "OK\n" + ss.str();
-        send(client_sock, response.c_str(), response.length(), 0);
-        std::cout << "OK: List of messages for user " << current_user << " sent." << std::endl;
+        send(client_sock, ss.str().c_str(), ss.str().length(), 0);
+        std::cout << "OK: " << subjects.size() << " messages listed for user " << current_user << std::endl;
     }
 
     // Function to handle the READ command
