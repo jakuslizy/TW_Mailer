@@ -205,9 +205,27 @@ public:
             std::cout << "Nachrichtennummer zum Löschen: ";
             std::getline(std::cin, number);
 
-            safeSend("DEL\n" + number + "\n");
+            // Validiere Eingabe
+            try {
+                int msg_num = std::stoi(number);
+                if (msg_num <= 0) {
+                    std::cout << "Ungültige Nachrichtennummer" << std::endl;
+                    return;
+                }
+            } catch (...) {
+                std::cout << "Bitte geben Sie eine gültige Nummer ein" << std::endl;
+                return;
+            }
+
+            safeSend("DEL\n" + number + "\n.\n");
             std::string response = safeRead();
-            std::cout << "Server Antwort: " << response;
+
+            if (response.find("OK\n") != std::string::npos) {
+                std::cout << "Nachricht erfolgreich gelöscht" << std::endl;
+            } else {
+                std::string error = response.substr(4); // Remove "ERR\n"
+                std::cout << "Fehler beim Löschen: " << error;
+            }
         } catch (const std::exception& e) {
             std::cerr << "Fehler beim Löschen: " << e.what() << std::endl;
         }

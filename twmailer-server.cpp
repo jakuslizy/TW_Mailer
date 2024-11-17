@@ -356,20 +356,46 @@ private:
     // Function to handle the DEL command
     // It reads the username and message number from the client and deletes the message
     void handleDel(std::istringstream& iss) {
-        std::string username, message_number;
-        std::getline(iss, username); // Get the username
-        std::getline(iss, message_number); // Get the message number
-
-        fs::path message_path = fs::path(mail_spool_dir) / username / (message_number + ".txt"); // Path to the message
-        if (!fs::exists(message_path)) {
-            send(client_sock, "ERR\n", 4, 0); // Send the error message to the client
-            std::cout << "Error: Message not found." << std::endl;
+        if (!is_authenticated) {
+            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
             return;
         }
 
-        fs::remove(message_path); // Delete the message
-        send(client_sock, "OK\n", 3, 0); // Send the OK message to the client
-        std::cout << "OK: Message " << message_number << " for user " << username << " deleted." << std::endl;
+        std::string message_number;
+        std::getline(iss, message_number);
+
+        // Validiere message_number
+        try {
+            int msg_num = std::stoi(message_number);
+            if (msg_num <= 0) {
+                throw std::out_of_range("Negative message number");
+            }
+        } catch (...) {
+            send(client_sock, "ERR\nUngültige Nachrichtennummer\n", 31, 0);
+            return;
+        }
+
+        // Nur Zugriff auf eigene Nachrichten
+        fs::path message_path = fs::path(mail_spool_dir) / current_user / (message_number + ".txt");
+
+        if (!fs::exists(message_path)) {
+            send(client_sock, "ERR\nNachricht nicht gefunden\n", 28, 0);
+            std::cout << "Error: Message " << message_number << " not found for user " << current_user << std::endl;
+            return;
+        }
+
+        try {
+            if (fs::remove(message_path)) {
+                send(client_sock, "OK\n", 3, 0);
+                std::cout << "OK: Message " << message_number << " deleted for user " << current_user << std::endl;
+            } else {
+                send(client_sock, "ERR\nKonnte Nachricht nicht löschen\n", 34, 0);
+                std::cout << "Error: Could not delete message " << message_number << std::endl;
+            }
+        } catch (const std::exception& e) {
+            send(client_sock, "ERR\nInterner Server Fehler\n", 26, 0);
+            std::cerr << "Error deleting message: " << e.what() << std::endl;
+        }
     }
 
     bool checkLDAPCredentials(const std::string& username, const std::string& password) {
