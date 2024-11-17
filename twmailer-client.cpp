@@ -126,6 +126,7 @@ public:
     void sendMail() {
         if (!checkLogin()) return;
 
+        // Try to send a mail
         try {
             std::string receiver, subject, content;
             std::cout << "Receiver: ";
@@ -258,7 +259,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Create a client object
     TwMailerClient client;
+    // Connect to the server
     if (!client.connect(argv[1], std::stoi(argv[2]))) {
         return 1;
     }

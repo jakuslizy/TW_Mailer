@@ -465,7 +465,7 @@ private:
             }
 
             // Check login attempts
-            if (login_attempts[client_ip] >= 3) {
+            if (login_attempts[client_ip] >= 2) {
                 blacklist[client_ip] = std::chrono::system_clock::now();
                 login_attempts[client_ip] = 0;
                 send(client_sock, "ERR\nToo many attempts\n", 22, 0);
