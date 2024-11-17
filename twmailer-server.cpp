@@ -17,9 +17,9 @@
 namespace fs = std::filesystem;
 
 // LDAP Konfiguration für Technikum Wien
-#define LDAP_URI "ldap://ldap.technikum-wien.at"
+#define LDAP_URI "ldap://ldap.technikum-wien.at:389"
 #define LDAP_PORT 389
-#define LDAP_BASEDN "dc=technikum-wien,dc=at"
+#define LDAP_BASEDN "ou=people,dc=technikum-wien,dc=at"
 
 class TwMailerServer {
 private:
@@ -343,28 +343,34 @@ private:
         LDAP* ld;
         int rc;
         
-        // LDAP initialisieren
+        std::cout << "Versuche LDAP-Verbindung zu: " << LDAP_URI << std::endl;
+        
         rc = ldap_initialize(&ld, LDAP_URI);
         if (rc != LDAP_SUCCESS) {
             std::cerr << "LDAP init failed: " << ldap_err2string(rc) << std::endl;
             return false;
         }
 
-        // LDAP Version setzen
+        std::cout << "LDAP initialisiert" << std::endl;
+
         int version = LDAP_VERSION3;
         ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
 
-        // Bind mit Benutzeranmeldeinformationen
         struct berval cred;
         cred.bv_val = (char*)password.c_str();
         cred.bv_len = password.length();
         
-        std::string userdn = "uid=" + username + ",dc=technikum-wien,dc=at";
+        std::string userdn = "uid=" + username + ",ou=people,dc=technikum-wien,dc=at";
+        std::cout << "Versuche Bind mit DN: " << userdn << std::endl;
+        
         rc = ldap_sasl_bind_s(ld, userdn.c_str(), LDAP_SASL_SIMPLE, &cred,
                              nullptr, nullptr, nullptr);
 
+        if (rc != LDAP_SUCCESS) {
+            std::cerr << "LDAP bind failed: " << ldap_err2string(rc) << std::endl;
+        }
+
         bool success = (rc == LDAP_SUCCESS);
-        
         ldap_unbind_ext_s(ld, nullptr, nullptr);
         return success;
     }
