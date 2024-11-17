@@ -306,23 +306,51 @@ private:
     // Function to handle the READ command
     // It reads the username and message number from the client and sends the message to the client
     void handleRead(std::istringstream& iss) {
-        std::string username, message_number;
-        std::getline(iss, username); // Get the username
-        std::getline(iss, message_number); // Get the message number
-
-        fs::path message_path = fs::path(mail_spool_dir) / username / (message_number + ".txt");
-        if (!fs::exists(message_path)) {
-            send(client_sock, "ERR\n", 4, 0); // Send the error message to the client
-            std::cout << "Error: Message not found." << std::endl;
+        if (!is_authenticated) {
+            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
             return;
         }
 
-        std::ifstream infile(message_path);
-        std::stringstream ss;
-        ss << "OK\n" << infile.rdbuf(); // Write the message to the stringstream
+        std::string message_number;
+        std::getline(iss, message_number);
 
-        send(client_sock, ss.str().c_str(), ss.str().length(), 0); // Send the message to the client
-        std::cout << "OK: Message " << message_number << " for user " << username << " sent." << std::endl;
+        // Validiere message_number (sollte eine positive Zahl sein)
+        try {
+            int msg_num = std::stoi(message_number);
+            if (msg_num <= 0) {
+                throw std::out_of_range("Negative message number");
+            }
+        } catch (...) {
+            send(client_sock, "ERR\nUngültige Nachrichtennummer\n", 31, 0);
+            return;
+        }
+
+        fs::path message_path = fs::path(mail_spool_dir) / current_user / (message_number + ".txt");
+
+        // Prüfe ob die Nachricht existiert
+        if (!fs::exists(message_path)) {
+            send(client_sock, "ERR\nNachricht nicht gefunden\n", 28, 0);
+            return;
+        }
+
+        // Lese und sende die Nachricht
+        try {
+            std::ifstream infile(message_path);
+            if (!infile) {
+                send(client_sock, "ERR\nKann Nachricht nicht lesen\n", 30, 0);
+                return;
+            }
+
+            std::stringstream ss;
+            ss << "OK\n" << infile.rdbuf() << ".\n";
+
+            std::string response = ss.str();
+            send(client_sock, response.c_str(), response.length(), 0);
+            std::cout << "OK: Message " << message_number << " sent to user " << current_user << std::endl;
+        } catch (const std::exception& e) {
+            send(client_sock, "ERR\nInterner Server Fehler\n", 26, 0);
+            std::cerr << "Error reading message: " << e.what() << std::endl;
+        }
     }
 
     // Function to handle the DEL command

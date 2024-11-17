@@ -168,9 +168,30 @@ public:
             std::cout << "Nachrichtennummer: ";
             std::getline(std::cin, number);
 
-            safeSend("READ\n" + number + "\n");
+            // Validiere Eingabe
+            try {
+                int msg_num = std::stoi(number);
+                if (msg_num <= 0) {
+                    std::cout << "Ungültige Nachrichtennummer" << std::endl;
+                    return;
+                }
+            } catch (...) {
+                std::cout << "Bitte geben Sie eine gültige Nummer ein" << std::endl;
+                return;
+            }
+
+            safeSend("READ\n" + number + "\n.\n");
             std::string response = safeRead();
-            std::cout << "Nachricht:\n" << response;
+
+            // Prüfe Response Format
+            if (response.substr(0, 3) == "OK\n") {
+                // Entferne "OK\n" vom Anfang und ".\n" vom Ende
+                response = response.substr(3, response.length() - 5);
+                std::cout << "Nachricht:\n" << response;
+            } else {
+                // Zeige Fehlermeldung an
+                std::cout << "Fehler: " << response;
+            }
         } catch (const std::exception& e) {
             std::cerr << "Fehler beim Lesen: " << e.what() << std::endl;
         }
