@@ -195,7 +195,7 @@ private:
                 } else if (command == "SEND") {
                     handleSend(iss);
                 } else if (command == "LIST") {
-                    handleList();  // Kein iss Parameter mehr nötig
+                    handleList();
                 } else if (command == "READ") {
                     handleRead(iss);
                 } else if (command == "DEL") {
@@ -257,38 +257,40 @@ private:
 
     // Function to handle the LIST command
     // It reads the username from the client and sends the list of messages to the client
-    void handleList(std::istringstream& iss) {
-        std::string username;
-        std::getline(iss, username); // Get the username
+    void handleList() {
+        if (!is_authenticated) {
+            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+            return;
+        }
 
-        fs::path inbox_path = fs::path(mail_spool_dir) / username; // Path to the user's inbox
+        fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
         if (!fs::exists(inbox_path)) {
-            std::string error_msg = "ERR\nUser " + username + " has no messages.\n"; // Error message
-            send(client_sock, error_msg.c_str(), error_msg.length(), 0); // Send the error message to the client
-            std::cout << "Error: Empty list sent for user " << username << std::endl;
+            std::string error_msg = "ERR\nKeine Nachrichten vorhanden.\n";
+            send(client_sock, error_msg.c_str(), error_msg.length(), 0);
+            std::cout << "Error: Empty list sent for user " << current_user << std::endl;
             return;
         }
 
         std::vector<std::string> subjects;
         for (const auto& entry : fs::directory_iterator(inbox_path)) {
-            std::ifstream infile(entry.path()); // Open the message file
+            std::ifstream infile(entry.path());
             std::string line;
             while (std::getline(infile, line)) {
                 if (line.find("Subject: ") == 0) {
-                    subjects.push_back(line.substr(9)); // Add the subject to the vector
+                    subjects.push_back(line.substr(9));
                     break;
                 }
             }
         }
 
         std::stringstream ss;
-        ss << "OK\n" << subjects.size() << "\n"; // Write the number of messages
+        ss << "OK\n" << subjects.size() << "\n";
         for (const auto& subject : subjects) {
-            ss << subject << "\n"; // Write the subjects
+            ss << subject << "\n";
         }
 
-        send(client_sock, ss.str().c_str(), ss.str().length(), 0); // Send the list of messages to the client
-        std::cout << "OK: List of messages for user " << username << " sent." << std::endl;
+        send(client_sock, ss.str().c_str(), ss.str().length(), 0);
+        std::cout << "OK: List of messages for user " << current_user << " sent." << std::endl;
     }
 
     // Function to handle the READ command
