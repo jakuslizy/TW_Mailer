@@ -97,18 +97,21 @@ public:
         std::cout << "Password: ";
         std::getline(std::cin, password);
 
-        std::string message = "LOGIN\n" + username + "\n" + password + "\n";
-        send(sock, message.c_str(), message.length(), 0);
-
-        char buffer[1024] = {0};
-        read(sock, buffer, 1024);
-
-        if (std::string(buffer) == "OK\n") {
-            is_logged_in = true;
-            std::cout << "Login erfolgreich!" << std::endl;
-            return true;
-        } else {
-            std::cout << "Login fehlgeschlagen: " << buffer << std::endl;
+        try {
+            std::string message = "LOGIN\n" + username + "\n" + password + "\n.\n";
+            safeSend(message);
+            std::string response = safeRead();
+            
+            if (response.find("OK\n") != std::string::npos) {
+                is_logged_in = true;
+                std::cout << "Login erfolgreich!" << std::endl;
+                return true;
+            } else {
+                std::cout << "Login fehlgeschlagen: " << response << std::endl;
+                return false;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Fehler beim Login: " << e.what() << std::endl;
             return false;
         }
     }
