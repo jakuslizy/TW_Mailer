@@ -280,7 +280,6 @@ private:
             return;
         }
 
-        // Check if the user directory exists
         fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
         if (!fs::exists(inbox_path) || fs::is_empty(inbox_path)) {
             std::string error_msg = "ERR\nNo messages\n.\n";
@@ -288,28 +287,35 @@ private:
             return;
         }
 
-        std::vector <std::string> subjects;
-        // Search for all files in the user directory
-        for (const auto &entry: fs::directory_iterator(inbox_path)) {
+        std::vector<std::pair<int, std::string>> messages;
+        // Collect all messages with their numbers and subjects
+        for (const auto &entry : fs::directory_iterator(inbox_path)) {
             std::ifstream infile(entry.path());
             std::string line;
+            std::string filename = entry.path().filename().string();
+            int msg_num = std::stoi(filename.substr(0, filename.find(".txt")));
+
             while (std::getline(infile, line)) {
                 if (line.find("Subject: ") == 0) {
-                    subjects.push_back(line.substr(9));
+                    messages.push_back({msg_num, line.substr(9)});
                     break;
                 }
             }
         }
 
+        // Sort messages by their number
+        std::sort(messages.begin(), messages.end());
+
+        // Create response with sequential message numbering
         std::stringstream ss;
-        ss << "OK\n" << subjects.size() << "\n";
-        for (const auto &subject: subjects) {
-            ss << subject << "\n";
+        ss << "OK\n" << messages.size() << "\n";
+        for (size_t i = 0; i < messages.size(); i++) {
+            ss << messages[i].second << "\n";
         }
         ss << ".\n";
 
         send(client_sock, ss.str().c_str(), ss.str().length(), 0);
-        std::cout << "OK: " << subjects.size() << " messages listed for user " << current_user << std::endl;
+        std::cout << "OK: " << messages.size() << " messages listed for user " << current_user << std::endl;
     }
 
     // Function to handle the READ command
@@ -373,37 +379,48 @@ private:
         std::string message_number;
         std::getline(iss, message_number);
 
-        // Validate message_number
         try {
-            int msg_num = std::stoi(message_number);
-            if (msg_num <= 0) {
+            int requested_msg_num = std::stoi(message_number);
+            if (requested_msg_num <= 0) {
                 throw std::out_of_range("Negative message number");
             }
-        } catch (...) {
-            send(client_sock, "ERR\nInvalid message number\n", 31, 0);
-            return;
-        }
 
-        // Only access own messages
-        fs::path message_path = fs::path(mail_spool_dir) / current_user / (message_number + ".txt");
+            fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
+            std::vector<std::pair<int, fs::path>> messages;
 
-        if (!fs::exists(message_path)) {
-            send(client_sock, "ERR\nMessage not found\n", 28, 0);
-            std::cout << "Error: Message " << message_number << " not found for user " << current_user << std::endl;
-            return;
-        }
+            // Collect all messages with their file paths
+            for (const auto &entry : fs::directory_iterator(inbox_path)) {
+                std::string filename = entry.path().filename().string();
+                int msg_num = std::stoi(filename.substr(0, filename.find(".txt")));
+                messages.push_back({msg_num, entry.path()});
+            }
 
-        try {
-            if (fs::remove(message_path)) {
+            // Sort messages by their number
+            std::sort(messages.begin(), messages.end());
+
+            // Check if the requested message number is valid
+            if (requested_msg_num > static_cast<int>(messages.size())) {
+                send(client_sock, "ERR\nMessage not found\n", 28, 0);
+                return;
+            }
+
+            // Delete the requested message
+            if (fs::remove(messages[requested_msg_num - 1].second)) {
+                // Rename subsequent messages to maintain sequential numbering
+                for (size_t i = requested_msg_num; i < messages.size(); i++) {
+                    fs::path old_path = messages[i].second;
+                    fs::path new_path = old_path.parent_path() / (std::to_string(i) + ".txt");
+                    fs::rename(old_path, new_path);
+                }
+
                 send(client_sock, "OK\n", 3, 0);
                 std::cout << "OK: Message " << message_number << " deleted for user " << current_user << std::endl;
             } else {
                 send(client_sock, "ERR\nCould not delete message\n", 34, 0);
-                std::cout << "Error: Could not delete message " << message_number << std::endl;
             }
         } catch (const std::exception &e) {
-            send(client_sock, "ERR\nInternal server error\n", 26, 0);
-            std::cerr << "Error deleting message: " << e.what() << std::endl;
+            send(client_sock, "ERR\nInvalid message number\n", 31, 0);
+            std::cerr << "Error handling delete: " << e.what() << std::endl;
         }
     }
 
