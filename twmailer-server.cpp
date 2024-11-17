@@ -12,6 +12,7 @@
 #include <map>
 #include <chrono>
 #include <mutex>
+#include <algorithm>
 
 
 namespace fs = std::filesystem;
