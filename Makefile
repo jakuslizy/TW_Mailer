@@ -1,31 +1,28 @@
-# Compiler
+# Compiler settings
 CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -pthread
+LDFLAGS_SERVER = -lldap -llber
+LDFLAGS_CLIENT = 
 
-# Compiler flags
-CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic
+# Targets
+all: twmailer-server twmailer-client
 
-# Source files
-CLIENT_SRC = twmailer-client.cpp
-SERVER_SRC = twmailer-server.cpp
+# Server compilation with LDAP libraries
+twmailer-server: twmailer-server.cpp
+	$(CXX) $(CXXFLAGS) -o twmailer-server twmailer-server.cpp $(LDFLAGS_SERVER)
 
-# Output executables
-CLIENT_OUT = twmailer-client
-SERVER_OUT = twmailer-server
+# Client compilation (no LDAP needed)
+twmailer-client: twmailer-client.cpp
+	$(CXX) $(CXXFLAGS) -o twmailer-client twmailer-client.cpp $(LDFLAGS_CLIENT)
 
-# Default target
-all: $(CLIENT_OUT) $(SERVER_OUT)
-
-# Client compilation
-$(CLIENT_OUT): $(CLIENT_SRC)
-	$(CXX) $(CXXFLAGS) -o $@ $<
-
-# Server compilation
-$(SERVER_OUT): $(SERVER_SRC)
-	$(CXX) $(CXXFLAGS) -o $@ $<
-
-# Clean target
+# Clean build files
 clean:
-	rm -f $(CLIENT_OUT) $(SERVER_OUT)
+	rm -f twmailer-server twmailer-client
+	rm -f blacklist.dat
 
-# Phony targets
-.PHONY: all clean
+# Install required packages (Ubuntu/Debian)
+install-deps:
+	sudo apt-get update
+	sudo apt-get install -y libldap2-dev
+
+.PHONY: all clean install-deps

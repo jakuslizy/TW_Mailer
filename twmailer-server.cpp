@@ -7,6 +7,11 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <ldap.h>
+#include <sys/wait.h>
+#include <map>
+#include <chrono>
+#include <mutex>
 
 // Namespace for the filesystem
 namespace fs = std::filesystem;
@@ -17,10 +22,96 @@ private:
     struct sockaddr_in address; // Address for the server
     std::string mail_spool_dir; // Directory for the mail spool
 
+    std::map<std::string, int> login_attempts; // IP -> Anzahl der Versuche
+    std::map<std::string, std::chrono::system_clock::time_point> blacklist; // IP -> Zeitpunkt
+    std::mutex login_mutex;
+    
+    // Session-Informationen
+    std::string current_user;
+    bool is_authenticated;
+    
+    // LDAP-Verbindung
+    LDAP* ldap;
+
+    const std::string blacklist_file = "blacklist.dat";
+    
+    void loadBlacklist() {
+        std::lock_guard<std::mutex> lock(login_mutex);
+        std::ifstream file(blacklist_file, std::ios::binary);
+        if (!file) return;
+        
+        size_t size;
+        file.read(reinterpret_cast<char*>(&size), sizeof(size));
+        
+        for (size_t i = 0; i < size; ++i) {
+            std::string ip;
+            std::chrono::system_clock::time_point timestamp;
+            
+            size_t ip_length;
+            file.read(reinterpret_cast<char*>(&ip_length), sizeof(ip_length));
+            ip.resize(ip_length);
+            file.read(&ip[0], ip_length);
+            
+            file.read(reinterpret_cast<char*>(&timestamp), sizeof(timestamp));
+            
+            auto now = std::chrono::system_clock::now();
+            if (now - timestamp < std::chrono::minutes(1)) {
+                blacklist[ip] = timestamp;
+            }
+        }
+        file.close();
+    }
+    
+    void saveBlacklist() {
+        std::lock_guard<std::mutex> lock(login_mutex);
+        std::ofstream file(blacklist_file, std::ios::binary);
+        if (!file) return;
+        
+        size_t size = blacklist.size();
+        file.write(reinterpret_cast<const char*>(&size), sizeof(size));
+        
+        for (const auto& [ip, timestamp] : blacklist) {
+            size_t ip_length = ip.length();
+            file.write(reinterpret_cast<const char*>(&ip_length), sizeof(ip_length));
+            file.write(ip.c_str(), ip_length);
+            file.write(reinterpret_cast<const char*>(&timestamp), sizeof(timestamp));
+        }
+        file.close();
+    }
+
+    std::string safeRead() {
+        std::string result;
+        const size_t chunk_size = 1024;
+        char chunk[chunk_size];
+        size_t total_bytes = 0;
+        const size_t max_size = 100 * 1024 * 1024; // 100MB Limit
+        
+        while (true) {
+            memset(chunk, 0, chunk_size);
+            ssize_t bytes = read(client_sock, chunk, chunk_size - 1);
+            
+            if (bytes <= 0) break;
+            
+            total_bytes += bytes;
+            if (total_bytes > max_size) {
+                throw std::runtime_error("Message too large");
+            }
+            
+            result.append(chunk, bytes);
+            
+            // Prüfen ob die Nachricht komplett ist
+            if (result.find("\n.\n") != std::string::npos) {
+                break;
+            }
+        }
+        return result;
+    }
+
 public:
     // Constructor for the server
     // It creates the socket and binds it to the address
-    TwMailerServer(int port, const std::string& mail_dir) : mail_spool_dir(mail_dir) {
+    TwMailerServer(int port, const std::string& mail_dir) 
+        : mail_spool_dir(mail_dir), is_authenticated(false) {
         server_fd = socket(AF_INET, SOCK_STREAM, 0); // Create the socket
         if (server_fd == 0) {
             throw std::runtime_error("Socket creation failed");
@@ -42,32 +133,42 @@ public:
 
         // Create the mail spool directory
         fs::create_directories(mail_spool_dir);
+
+        loadBlacklist();
     }
 
     // Destructor for the server
     // It closes the socket
     ~TwMailerServer() {
+        saveBlacklist();
         close(server_fd);
     }
 
     // Main loop for the server
     // It accepts connections from clients and handles them
     void run() {
-
         int addrlen = sizeof(address);
-        std::cout << "Server is running..." << std::endl;
+        std::cout << "Server läuft..." << std::endl;
 
         while (true) {
-            // Accept a connection from a client
             client_sock = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-            // Check if the connection was successful
             if (client_sock < 0) {
-                std::cerr << "Accept failed" << std::endl;
+                std::cerr << "Accept fehlgeschlagen" << std::endl;
                 continue;
             }
 
-            // Handle the client
-            handleClient();
+            pid_t pid = fork();
+            if (pid == 0) {  // Child-Prozess
+                close(server_fd);  // Child schließt Server-Socket
+                handleClient();
+                exit(0);
+            } else if (pid > 0) {  // Parent-Prozess
+                close(client_sock);  // Parent schließt Client-Socket
+                // Zombie-Prozesse verhindern
+                signal(SIGCHLD, SIG_IGN);
+            } else {
+                std::cerr << "Fork fehlgeschlagen" << std::endl;
+            }
         }
     }
 
@@ -75,47 +176,41 @@ private:
     // Function to handle a client
     // It reads the commands from the client and handles them
     void handleClient() {
-        char buffer[1024] = {0}; // Buffer to store the command
-        std::string command; // Command to be executed
+        try {
+            while (true) {
+                std::string input = safeRead();
+                if (input.empty()) {
+                    std::cout << "Client disconnected." << std::endl;
+                    break;
+                }
 
-        std::cout << "New client connection accepted." << std::endl;
+                std::istringstream iss(input);
+                std::string command;
+                std::getline(iss, command);
 
-        while (true) {
-            memset(buffer, 0, sizeof(buffer)); // Clear the buffer
-            int valread = read(client_sock, buffer, 1024); // Read the command from the client
-            if (valread <= 0) {
-                std::cout << "Client disconnected." << std::endl;
-                break;
+                if (command == "LOGIN") {
+                    handleLogin(iss);
+                } else if (!is_authenticated && command != "QUIT") {
+                    send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+                } else if (command == "SEND") {
+                    handleSend(iss);
+                } else if (command == "LIST") {
+                    handleList();  // Kein iss Parameter mehr nötig
+                } else if (command == "READ") {
+                    handleRead(iss);
+                } else if (command == "DEL") {
+                    handleDel(iss);
+                } else if (command == "QUIT") {
+                    break;
+                } else {
+                    send(client_sock, "ERR\nUnbekannter Befehl\n", 23, 0);
+                }
             }
-
-            std::istringstream iss(buffer); // String stream to store the command
-            std::getline(iss, command); // Get the command
-
-            std::cout << "Received command: " << command << std::endl; // Print the command
-
-            if (command == "SEND") {
-                std::cout << "Processing SEND command..." << std::endl;
-                handleSend(iss);
-            } else if (command == "LIST") {
-                std::cout << "Processing LIST command..." << std::endl;
-                handleList(iss);
-            } else if (command == "READ") {
-                std::cout << "Processing READ command..." << std::endl;
-                handleRead(iss);
-            } else if (command == "DEL") {
-                std::cout << "Processing DEL command..." << std::endl;
-                handleDel(iss);
-            } else if (command == "QUIT") {
-                std::cout << "Client terminates the connection." << std::endl;
-                break;
-            } else {
-                std::cout << "Invalid command received." << std::endl;
-                send(client_sock, "ERR\n", 4, 0);
-            }
+        } catch (const std::exception& e) {
+            std::cerr << "Error handling client: " << e.what() << std::endl;
         }
-
+        
         close(client_sock);
-        std::cout << "Client connection closed." << std::endl;
     }
 
     // Function to handle the SEND command
@@ -235,6 +330,69 @@ private:
         fs::remove(message_path); // Delete the message
         send(client_sock, "OK\n", 3, 0); // Send the OK message to the client
         std::cout << "OK: Message " << message_number << " for user " << username << " deleted." << std::endl;
+    }
+
+    bool checkLDAPCredentials(const std::string& username, const std::string& password) {
+        int rc;
+        
+        // LDAP-Verbindung initialisieren
+        rc = ldap_initialize(&ldap, "ldap://ldap.technikum-wien.at:389");
+        if (rc != LDAP_SUCCESS) {
+            return false;
+        }
+
+        // Bind mit Benutzeranmeldeinformationen
+        std::string bind_dn = "uid=" + username + ",dc=technikum-wien,dc=at";
+        struct berval cred;
+        cred.bv_val = (char*)password.c_str();
+        cred.bv_len = password.length();
+
+        rc = ldap_sasl_bind_s(ldap, bind_dn.c_str(), LDAP_SASL_SIMPLE, &cred, 
+                             nullptr, nullptr, nullptr);
+        
+        ldap_unbind_ext_s(ldap, nullptr, nullptr);
+        return rc == LDAP_SUCCESS;
+    }
+
+    void handleLogin(std::istringstream& iss) {
+        std::string username, password;
+        std::getline(iss, username);
+        std::getline(iss, password);
+        
+        std::string client_ip = inet_ntoa(address.sin_addr);
+        
+        {
+            std::lock_guard<std::mutex> lock(login_mutex);
+            
+            // Prüfen ob IP gesperrt ist
+            auto it = blacklist.find(client_ip);
+            if (it != blacklist.end()) {
+                auto now = std::chrono::system_clock::now();
+                if (now - it->second < std::chrono::minutes(1)) {
+                    send(client_sock, "ERR\nIP ist gesperrt\n", 20, 0);
+                    return;
+                }
+                blacklist.erase(it);
+            }
+            
+            // Login-Versuche prüfen
+            if (login_attempts[client_ip] >= 3) {
+                blacklist[client_ip] = std::chrono::system_clock::now();
+                login_attempts[client_ip] = 0;
+                send(client_sock, "ERR\nZu viele Versuche\n", 22, 0);
+                return;
+            }
+        }
+        
+        if (checkLDAPCredentials(username, password)) {
+            current_user = username;
+            is_authenticated = true;
+            login_attempts[client_ip] = 0;
+            send(client_sock, "OK\n", 3, 0);
+        } else {
+            login_attempts[client_ip]++;
+            send(client_sock, "ERR\n", 4, 0);
+        }
     }
 };
 
