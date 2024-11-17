@@ -13,10 +13,10 @@
 #include <chrono>
 #include <mutex>
 
-// Namespace for the filesystem
+
 namespace fs = std::filesystem;
 
-// LDAP Konfiguration für Technikum Wien
+// LDAP Configuration for Technikum Wien
 #define LDAP_URI "ldap://ldap.technikum-wien.at:389"
 #define LDAP_PORT 389
 #define LDAP_BASEDN "ou=people,dc=technikum-wien,dc=at"
@@ -27,38 +27,41 @@ private:
     struct sockaddr_in address; // Address for the server
     std::string mail_spool_dir; // Directory for the mail spool
 
-    std::map<std::string, int> login_attempts; // IP -> Anzahl der Versuche
-    std::map<std::string, std::chrono::system_clock::time_point> blacklist; // IP -> Zeitpunkt
+    std::map<std::string, int> login_attempts; // IP -> Number of attempts
+    std::map <std::string, std::chrono::system_clock::time_point> blacklist; // IP -> Timestamp
     std::mutex login_mutex;
-    
-    // Session-Informationen
+
+    // Session information
     std::string current_user;
     bool is_authenticated;
-    
-    // LDAP-Verbindung
-    LDAP* ldap;
 
+    // LDAP connection
+    LDAP *ldap;
+
+    // Blacklist file for IP addresses
     const std::string blacklist_file = "blacklist.dat";
-    
+
     void loadBlacklist() {
-        std::lock_guard<std::mutex> lock(login_mutex);
-        std::ifstream file(blacklist_file, std::ios::binary);
-        if (!file) return;
-        
+        std::lock_guard <std::mutex> lock(login_mutex); // Lock the mutex
+        std::ifstream file(blacklist_file, std::ios::binary); // Open the blacklist file
+        if (!file) return; // If the file is not found, return
+
         size_t size;
-        file.read(reinterpret_cast<char*>(&size), sizeof(size));
-        
+        file.read(reinterpret_cast<char *>(&size), sizeof(size)); // Read the size of the blacklist
+
+        // Iterate over the blacklist
         for (size_t i = 0; i < size; ++i) {
             std::string ip;
             std::chrono::system_clock::time_point timestamp;
-            
+
             size_t ip_length;
-            file.read(reinterpret_cast<char*>(&ip_length), sizeof(ip_length));
+            file.read(reinterpret_cast<char *>(&ip_length), sizeof(ip_length)); // Read the length of the IP address
             ip.resize(ip_length);
-            file.read(&ip[0], ip_length);
-            
-            file.read(reinterpret_cast<char*>(&timestamp), sizeof(timestamp));
-            
+            file.read(&ip[0], ip_length); // Read the IP address
+
+            file.read(reinterpret_cast<char *>(&timestamp), sizeof(timestamp)); // Read the timestamp
+
+            // If the timestamp is within the last minute, add the IP to the blacklist
             auto now = std::chrono::system_clock::now();
             if (now - timestamp < std::chrono::minutes(1)) {
                 blacklist[ip] = timestamp;
@@ -66,45 +69,50 @@ private:
         }
         file.close();
     }
-    
+
+    // Save the blacklist to the file
     void saveBlacklist() {
-        std::lock_guard<std::mutex> lock(login_mutex);
-        std::ofstream file(blacklist_file, std::ios::binary);
-        if (!file) return;
-        
+        std::lock_guard <std::mutex> lock(login_mutex);
+        std::ofstream file(blacklist_file, std::ios::binary); // Open the blacklist file
+        if (!file) return; // If the file is not found, return
+
         size_t size = blacklist.size();
-        file.write(reinterpret_cast<const char*>(&size), sizeof(size));
-        
-        for (const auto& [ip, timestamp] : blacklist) {
+        file.write(reinterpret_cast<const char *>(&size), sizeof(size)); // Write the size of the blacklist
+
+        // Iterate over the blacklist
+        for (const auto &[ip, timestamp]: blacklist) {
             size_t ip_length = ip.length();
-            file.write(reinterpret_cast<const char*>(&ip_length), sizeof(ip_length));
-            file.write(ip.c_str(), ip_length);
-            file.write(reinterpret_cast<const char*>(&timestamp), sizeof(timestamp));
+            file.write(reinterpret_cast<const char *>(&ip_length),
+                       sizeof(ip_length)); // Write the length of the IP address
+            file.write(ip.c_str(), ip_length); // Write the IP address
+            file.write(reinterpret_cast<const char *>(&timestamp), sizeof(timestamp)); // Write the timestamp
         }
         file.close();
     }
 
+    // Read a message from the client safely
     std::string safeRead() {
         std::string result;
         const size_t chunk_size = 1024;
         char chunk[chunk_size];
         size_t total_bytes = 0;
         const size_t max_size = 100 * 1024 * 1024; // 100MB Limit
-        
+
+        // Read the message from the client
         while (true) {
-            memset(chunk, 0, chunk_size);
+            memset(chunk, 0, chunk_size); // Clear the chunk
             ssize_t bytes = read(client_sock, chunk, chunk_size - 1);
-            
+
             if (bytes <= 0) break;
-            
+
             total_bytes += bytes;
             if (total_bytes > max_size) {
                 throw std::runtime_error("Message too large");
             }
-            
+
             result.append(chunk, bytes);
-            
-            // Prüfen ob die Nachricht komplett ist
+
+            // Check if the message is complete
             if (result.find("\n.\n") != std::string::npos) {
                 break;
             }
@@ -115,8 +123,8 @@ private:
 public:
     // Constructor for the server
     // It creates the socket and binds it to the address
-    TwMailerServer(int port, const std::string& mail_dir) 
-        : mail_spool_dir(mail_dir), is_authenticated(false) {
+    TwMailerServer(int port, const std::string &mail_dir)
+            : mail_spool_dir(mail_dir), is_authenticated(false) {
         server_fd = socket(AF_INET, SOCK_STREAM, 0); // Create the socket
         if (server_fd == 0) {
             throw std::runtime_error("Socket creation failed");
@@ -127,7 +135,7 @@ public:
         address.sin_port = htons(port); // Set the port to the given port
 
         // If the bind fails, throw an error
-        if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
             throw std::runtime_error("Bind failed");
         }
 
@@ -153,26 +161,26 @@ public:
     // It accepts connections from clients and handles them
     void run() {
         int addrlen = sizeof(address);
-        std::cout << "Server läuft..." << std::endl;
+        std::cout << "Server is running..." << std::endl;
 
         while (true) {
-            client_sock = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+            client_sock = accept(server_fd, (struct sockaddr *) &address, (socklen_t * ) & addrlen);
             if (client_sock < 0) {
-                std::cerr << "Accept fehlgeschlagen" << std::endl;
+                std::cerr << "Accept failed" << std::endl;
                 continue;
             }
 
             pid_t pid = fork();
-            if (pid == 0) {  // Child-Prozess
-                close(server_fd);  // Child schließt Server-Socket
+            if (pid == 0) {  // Child process
+                close(server_fd);  // Child closes the server socket
                 handleClient();
                 exit(0);
             } else if (pid > 0) {  // Parent-Prozess
-                close(client_sock);  // Parent schließt Client-Socket
-                // Zombie-Prozesse verhindern
+                close(client_sock);  // Parent closes the client socket
+                // Prevent zombie processes
                 signal(SIGCHLD, SIG_IGN);
             } else {
-                std::cerr << "Fork fehlgeschlagen" << std::endl;
+                std::cerr << "Fork failed" << std::endl;
             }
         }
     }
@@ -189,6 +197,7 @@ private:
                     break;
                 }
 
+                // Read the command from the client
                 std::istringstream iss(input);
                 std::string command;
                 std::getline(iss, command);
@@ -196,7 +205,7 @@ private:
                 if (command == "LOGIN") {
                     handleLogin(iss);
                 } else if (!is_authenticated && command != "QUIT") {
-                    send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+                    send(client_sock, "ERR\nNot logged in\n", 21, 0);
                 } else if (command == "SEND") {
                     handleSend(iss);
                 } else if (command == "LIST") {
@@ -208,21 +217,21 @@ private:
                 } else if (command == "QUIT") {
                     break;
                 } else {
-                    send(client_sock, "ERR\nUnbekannter Befehl\n", 23, 0);
+                    send(client_sock, "ERR\nUnknown command\n", 23, 0);
                 }
             }
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             std::cerr << "Error handling client: " << e.what() << std::endl;
         }
-        
+
         close(client_sock);
     }
 
     // Function to handle the SEND command
     // It reads the sender, receiver, subject, and content from the client
-    void handleSend(std::istringstream& iss) {
+    void handleSend(std::istringstream &iss) {
         if (!is_authenticated) {
-            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+            send(client_sock, "ERR\nNot logged in\n", 21, 0);
             return;
         }
 
@@ -233,17 +242,17 @@ private:
         std::cout << "Sending message from " << current_user << " to " << receiver << std::endl;
         std::cout << "Subject: " << subject << std::endl;
 
-        // Erstelle Benutzerverzeichnis für den Empfänger
+        // Create the user directory for the receiver
         fs::path inbox_path = fs::path(mail_spool_dir) / receiver;
         fs::create_directories(inbox_path);
 
-        // Finde die nächste freie Nachrichtennummer
+        // Find the next free message number
         int message_number = 1;
         while (fs::exists(inbox_path / (std::to_string(message_number) + ".txt"))) {
             message_number++;
         }
 
-        // Speichere die Nachricht im Verzeichnis des Empfängers
+        // Create the message file
         std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
         if (!outfile) {
             std::cout << "Error creating message file." << std::endl;
@@ -267,21 +276,21 @@ private:
     // It reads the username from the client and sends the list of messages to the client
     void handleList() {
         if (!is_authenticated) {
-            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+            send(client_sock, "ERR\nNot logged in\n", 21, 0);
             return;
         }
 
-        // Benutzerverzeichnis überprüfen
+        // Check if the user directory exists
         fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
         if (!fs::exists(inbox_path) || fs::is_empty(inbox_path)) {
-            std::string error_msg = "ERR\nKeine Nachrichten vorhanden\n.\n";
+            std::string error_msg = "ERR\nNo messages\n.\n";
             send(client_sock, error_msg.c_str(), error_msg.length(), 0);
             return;
         }
 
-        std::vector<std::string> subjects;
-        // Durchsuche alle Dateien im Benutzerverzeichnis
-        for (const auto& entry : fs::directory_iterator(inbox_path)) {
+        std::vector <std::string> subjects;
+        // Search for all files in the user directory
+        for (const auto &entry: fs::directory_iterator(inbox_path)) {
             std::ifstream infile(entry.path());
             std::string line;
             while (std::getline(infile, line)) {
@@ -294,7 +303,7 @@ private:
 
         std::stringstream ss;
         ss << "OK\n" << subjects.size() << "\n";
-        for (const auto& subject : subjects) {
+        for (const auto &subject: subjects) {
             ss << subject << "\n";
         }
         ss << ".\n";
@@ -305,39 +314,39 @@ private:
 
     // Function to handle the READ command
     // It reads the username and message number from the client and sends the message to the client
-    void handleRead(std::istringstream& iss) {
+    void handleRead(std::istringstream &iss) {
         if (!is_authenticated) {
-            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+            send(client_sock, "ERR\nNot logged in\n", 21, 0);
             return;
         }
 
         std::string message_number;
         std::getline(iss, message_number);
 
-        // Validiere message_number (sollte eine positive Zahl sein)
+        // Validate the message number
         try {
             int msg_num = std::stoi(message_number);
             if (msg_num <= 0) {
                 throw std::out_of_range("Negative message number");
             }
         } catch (...) {
-            send(client_sock, "ERR\nUngültige Nachrichtennummer\n", 31, 0);
+            send(client_sock, "ERR\nInvalid message number\n", 31, 0);
             return;
         }
 
         fs::path message_path = fs::path(mail_spool_dir) / current_user / (message_number + ".txt");
 
-        // Prüfe ob die Nachricht existiert
+        // Check if the message exists
         if (!fs::exists(message_path)) {
-            send(client_sock, "ERR\nNachricht nicht gefunden\n", 28, 0);
+            send(client_sock, "ERR\nMessage not found\n", 28, 0);
             return;
         }
 
-        // Lese und sende die Nachricht
+        // Read and send the message
         try {
             std::ifstream infile(message_path);
             if (!infile) {
-                send(client_sock, "ERR\nKann Nachricht nicht lesen\n", 30, 0);
+                send(client_sock, "ERR\nCannot read message\n", 30, 0);
                 return;
             }
 
@@ -347,39 +356,39 @@ private:
             std::string response = ss.str();
             send(client_sock, response.c_str(), response.length(), 0);
             std::cout << "OK: Message " << message_number << " sent to user " << current_user << std::endl;
-        } catch (const std::exception& e) {
-            send(client_sock, "ERR\nInterner Server Fehler\n", 26, 0);
+        } catch (const std::exception &e) {
+            send(client_sock, "ERR\nInternal server error\n", 26, 0);
             std::cerr << "Error reading message: " << e.what() << std::endl;
         }
     }
 
     // Function to handle the DEL command
     // It reads the username and message number from the client and deletes the message
-    void handleDel(std::istringstream& iss) {
+    void handleDel(std::istringstream &iss) {
         if (!is_authenticated) {
-            send(client_sock, "ERR\nNicht eingeloggt\n", 21, 0);
+            send(client_sock, "ERR\nNot logged in\n", 21, 0);
             return;
         }
 
         std::string message_number;
         std::getline(iss, message_number);
 
-        // Validiere message_number
+        // Validate message_number
         try {
             int msg_num = std::stoi(message_number);
             if (msg_num <= 0) {
                 throw std::out_of_range("Negative message number");
             }
         } catch (...) {
-            send(client_sock, "ERR\nUngültige Nachrichtennummer\n", 31, 0);
+            send(client_sock, "ERR\nInvalid message number\n", 31, 0);
             return;
         }
 
-        // Nur Zugriff auf eigene Nachrichten
+        // Only access own messages
         fs::path message_path = fs::path(mail_spool_dir) / current_user / (message_number + ".txt");
 
         if (!fs::exists(message_path)) {
-            send(client_sock, "ERR\nNachricht nicht gefunden\n", 28, 0);
+            send(client_sock, "ERR\nMessage not found\n", 28, 0);
             std::cout << "Error: Message " << message_number << " not found for user " << current_user << std::endl;
             return;
         }
@@ -389,41 +398,41 @@ private:
                 send(client_sock, "OK\n", 3, 0);
                 std::cout << "OK: Message " << message_number << " deleted for user " << current_user << std::endl;
             } else {
-                send(client_sock, "ERR\nKonnte Nachricht nicht löschen\n", 34, 0);
+                send(client_sock, "ERR\nCould not delete message\n", 34, 0);
                 std::cout << "Error: Could not delete message " << message_number << std::endl;
             }
-        } catch (const std::exception& e) {
-            send(client_sock, "ERR\nInterner Server Fehler\n", 26, 0);
+        } catch (const std::exception &e) {
+            send(client_sock, "ERR\nInternal server error\n", 26, 0);
             std::cerr << "Error deleting message: " << e.what() << std::endl;
         }
     }
 
-    bool checkLDAPCredentials(const std::string& username, const std::string& password) {
-        LDAP* ld;
+    bool checkLDAPCredentials(const std::string &username, const std::string &password) {
+        LDAP *ld;
         int rc;
-        
-        std::cout << "Versuche LDAP-Verbindung zu: " << LDAP_URI << std::endl;
-        
+
+        std::cout << "Trying to connect to LDAP: " << LDAP_URI << std::endl;
+
         rc = ldap_initialize(&ld, LDAP_URI);
         if (rc != LDAP_SUCCESS) {
             std::cerr << "LDAP init failed: " << ldap_err2string(rc) << std::endl;
             return false;
         }
 
-        std::cout << "LDAP initialisiert" << std::endl;
+        std::cout << "LDAP initialized" << std::endl;
 
         int version = LDAP_VERSION3;
         ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
 
         struct berval cred;
-        cred.bv_val = (char*)password.c_str();
+        cred.bv_val = (char *) password.c_str();
         cred.bv_len = password.length();
-        
+
         std::string userdn = "uid=" + username + ",ou=people,dc=technikum-wien,dc=at";
-        std::cout << "Versuche Bind mit DN: " << userdn << std::endl;
-        
+        std::cout << "Trying to bind with DN: " << userdn << std::endl;
+
         rc = ldap_sasl_bind_s(ld, userdn.c_str(), LDAP_SASL_SIMPLE, &cred,
-                             nullptr, nullptr, nullptr);
+                              nullptr, nullptr, nullptr);
 
         if (rc != LDAP_SUCCESS) {
             std::cerr << "LDAP bind failed: " << ldap_err2string(rc) << std::endl;
@@ -434,36 +443,36 @@ private:
         return success;
     }
 
-    void handleLogin(std::istringstream& iss) {
+    void handleLogin(std::istringstream &iss) {
         std::string username, password;
         std::getline(iss, username);
         std::getline(iss, password);
-        
+
         std::string client_ip = inet_ntoa(address.sin_addr);
-        
+
         {
-            std::lock_guard<std::mutex> lock(login_mutex);
-            
-            // Prüfen ob IP gesperrt ist
+            std::lock_guard <std::mutex> lock(login_mutex);
+
+            // Check if the IP is blacklisted
             auto it = blacklist.find(client_ip);
             if (it != blacklist.end()) {
                 auto now = std::chrono::system_clock::now();
                 if (now - it->second < std::chrono::minutes(1)) {
-                    send(client_sock, "ERR\nIP ist gesperrt\n", 20, 0);
+                    send(client_sock, "ERR\nIP is blocked\n", 20, 0);
                     return;
                 }
                 blacklist.erase(it);
             }
-            
-            // Login-Versuche prüfen
+
+            // Check login attempts
             if (login_attempts[client_ip] >= 3) {
                 blacklist[client_ip] = std::chrono::system_clock::now();
                 login_attempts[client_ip] = 0;
-                send(client_sock, "ERR\nZu viele Versuche\n", 22, 0);
+                send(client_sock, "ERR\nToo many attempts\n", 22, 0);
                 return;
             }
         }
-        
+
         if (checkLDAPCredentials(username, password)) {
             current_user = username;
             is_authenticated = true;
@@ -484,7 +493,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Create the server
-    TwMailerServer server(std::stoi(argv[1]), argv[2]); 
+    TwMailerServer server(std::stoi(argv[1]), argv[2]);
     // Run the server
     server.run();
 

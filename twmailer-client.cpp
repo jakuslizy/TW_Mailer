@@ -14,7 +14,7 @@ private:
     bool is_logged_in;
     std::string username;
 
-    // Neue Hilfsfunktionen für sicheres Lesen/Schreiben
+    // Function to safely read from the socket
     std::string safeRead() {
         std::string result;
         const size_t chunk_size = 1024;
@@ -25,18 +25,19 @@ private:
         while (true) {
             memset(chunk, 0, chunk_size);
             ssize_t bytes = read(sock, chunk, chunk_size - 1);
-            
+
             if (bytes <= 0) break;
-            
+
+            // Update total bytes read
             total_bytes += bytes;
             if (total_bytes > max_size) {
-                throw std::runtime_error("Nachricht zu groß");
+                throw std::runtime_error("Message too large");
             }
-            
+
             result.append(chunk, bytes);
-            
-            // Prüfen ob die Nachricht komplett ist (OK\n oder ERR\n am Ende)
-            if (result.find("OK\n") != std::string::npos || 
+
+            // Check if the message is complete
+            if (result.find("OK\n") != std::string::npos ||
                 result.find("ERR\n") != std::string::npos) {
                 break;
             }
@@ -44,15 +45,16 @@ private:
         return result;
     }
 
-    void safeSend(const std::string& message) {
+    // Function to safely send a message to the server
+    void safeSend(const std::string &message) {
         size_t total_sent = 0;
         while (total_sent < message.length()) {
-            ssize_t sent = send(sock, 
-                              message.c_str() + total_sent, 
-                              message.length() - total_sent, 
-                              0);
+            ssize_t sent = send(sock,
+                                message.c_str() + total_sent,
+                                message.length() - total_sent,
+                                0);
             if (sent <= 0) {
-                throw std::runtime_error("Verbindung unterbrochen");
+                throw std::runtime_error("Connection interrupted");
             }
             total_sent += sent;
         }
@@ -61,33 +63,37 @@ private:
 public:
     TwMailerClient() : sock(0), is_logged_in(false) {}
 
-    bool connect(const char* address, int port) {
+    // Function to connect to the server
+    bool connect(const char *address, int port) {
         struct sockaddr_in serv_addr;
-        
+
         if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            std::cout << "Socket-Erstellung fehlgeschlagen" << std::endl;
+            std::cout << "Socket creation failed" << std::endl;
             return false;
         }
-    
+        // Set up the server address
         serv_addr.sin_family = AF_INET;
         serv_addr.sin_port = htons(port);
-        
+
+        // Convert the address to a network address
         if (inet_pton(AF_INET, address, &serv_addr.sin_addr) <= 0) {
-            std::cout << "Ungültige Adresse" << std::endl;
+            std::cout << "Invalid address" << std::endl;
             return false;
         }
-    
-        if (::connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-            std::cout << "Verbindung fehlgeschlagen" << std::endl;
+
+        // Connect to the server
+        if (::connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+            std::cout << "Connection failed" << std::endl;
             return false;
         }
-        
+
         return true;
     }
 
+    // Function to login to the server
     bool login() {
         if (is_logged_in) {
-            std::cout << "Bereits eingeloggt als: " << username << std::endl;
+            std::cout << "Already logged in as: " << username << std::endl;
             return true;
         }
 
@@ -101,39 +107,40 @@ public:
             std::string message = "LOGIN\n" + username + "\n" + password + "\n.\n";
             safeSend(message);
             std::string response = safeRead();
-            
+
             if (response.find("OK\n") != std::string::npos) {
                 is_logged_in = true;
-                std::cout << "Login erfolgreich!" << std::endl;
+                std::cout << "Login successful!" << std::endl;
                 return true;
             } else {
-                std::cout << "Login fehlgeschlagen: " << response << std::endl;
+                std::cout << "Login failed: " << response << std::endl;
                 return false;
             }
-        } catch (const std::exception& e) {
-            std::cerr << "Fehler beim Login: " << e.what() << std::endl;
+        } catch (const std::exception &e) {
+            std::cerr << "Login error: " << e.what() << std::endl;
             return false;
         }
     }
 
+    // Function to send a mail
     void sendMail() {
         if (!checkLogin()) return;
 
         try {
             std::string receiver, subject, content;
-            std::cout << "Empfänger: ";
+            std::cout << "Receiver: ";
             std::getline(std::cin, receiver);
-            
-            std::cout << "Betreff (max 80 Zeichen): ";
+
+            std::cout << "Subject (max 80 characters): ";
             std::getline(std::cin, subject);
             if (subject.length() > 80) {
-                std::cout << "Betreff zu lang!" << std::endl;
+                std::cout << "Subject too long!" << std::endl;
                 return;
             }
-            
-            std::cout << "Nachricht (Ende mit einzelnem '.' in neuer Zeile):\n";
+
+            std::cout << "Message (end with a single '.' in a new line):\n";
             std::string message = "SEND\n" + receiver + "\n" + subject + "\n";
-            
+
             std::string line;
             while (std::getline(std::cin, line) && line != ".") {
                 message += line + "\n";
@@ -142,78 +149,81 @@ public:
 
             safeSend(message);
             std::string response = safeRead();
-            std::cout << "Server Antwort: " << response;
-        } catch (const std::exception& e) {
-            std::cerr << "Fehler beim Senden: " << e.what() << std::endl;
+            std::cout << "Server response: " << response;
+        } catch (const std::exception &e) {
+            std::cerr << "Sending error: " << e.what() << std::endl;
         }
     }
 
+    // Function to list all mails
     void listMails() {
         if (!checkLogin()) return;
 
         try {
             safeSend("LIST\n.\n");
             std::string response = safeRead();
-            std::cout << "Ihre Nachrichten:\n" << response;
-        } catch (const std::exception& e) {
-            std::cerr << "Fehler beim Auflisten: " << e.what() << std::endl;
+            std::cout << "Your messages:\n" << response;
+        } catch (const std::exception &e) {
+            std::cerr << "Listing error: " << e.what() << std::endl;
         }
     }
 
+    // Function to read a mail
     void readMail() {
         if (!checkLogin()) return;
 
         try {
             std::string number;
-            std::cout << "Nachrichtennummer: ";
+            std::cout << "Message number: ";
             std::getline(std::cin, number);
 
-            // Validiere Eingabe
+            // Validate input
             try {
                 int msg_num = std::stoi(number);
                 if (msg_num <= 0) {
-                    std::cout << "Ungültige Nachrichtennummer" << std::endl;
+                    std::cout << "Invalid message number" << std::endl;
                     return;
                 }
             } catch (...) {
-                std::cout << "Bitte geben Sie eine gültige Nummer ein" << std::endl;
+                std::cout << "Please enter a valid number" << std::endl;
                 return;
             }
 
             safeSend("READ\n" + number + "\n.\n");
             std::string response = safeRead();
 
-            // Prüfe Response Format
+            // Check response format
             if (response.substr(0, 3) == "OK\n") {
-                // Entferne "OK\n" vom Anfang und ".\n" vom Ende
+                // Remove "OK\n" from the beginning and ".\n" from the end
                 response = response.substr(3, response.length() - 5);
-                std::cout << "Nachricht:\n" << response;
+                std::cout << "Message:\n" << response;
             } else {
-                // Zeige Fehlermeldung an
-                std::cout << "Fehler: " << response;
+                // Show error message
+                std::cout << "Error: " << response;
             }
-        } catch (const std::exception& e) {
-            std::cerr << "Fehler beim Lesen: " << e.what() << std::endl;
+        } catch (const std::exception &e) {
+            std::cerr << "Reading error: " << e.what() << std::endl;
         }
     }
 
+    // Function to delete a mail
     void deleteMail() {
         if (!checkLogin()) return;
 
         try {
             std::string number;
-            std::cout << "Nachrichtennummer zum Löschen: ";
+            std::cout << "Message number to delete: ";
             std::getline(std::cin, number);
 
-            // Validiere Eingabe
+            // Validate input
             try {
                 int msg_num = std::stoi(number);
                 if (msg_num <= 0) {
-                    std::cout << "Ungültige Nachrichtennummer" << std::endl;
+                    std::cout << "Invalid message number" << std::endl;
                     return;
                 }
             } catch (...) {
-                std::cout << "Bitte geben Sie eine gültige Nummer ein" << std::endl;
+                std::cout << "Please enter a valid number" << std::endl;
                 return;
             }
 
@@ -221,20 +231,21 @@ public:
             std::string response = safeRead();
 
             if (response.find("OK\n") != std::string::npos) {
-                std::cout << "Nachricht erfolgreich gelöscht" << std::endl;
+                std::cout << "Message deleted successfully" << std::endl;
             } else {
                 std::string error = response.substr(4); // Remove "ERR\n"
-                std::cout << "Fehler beim Löschen: " << error;
+                std::cout << "Deletion error: " << error;
             }
-        } catch (const std::exception& e) {
-            std::cerr << "Fehler beim Löschen: " << e.what() << std::endl;
+        } catch (const std::exception &e) {
+            std::cerr << "Deletion error: " << e.what() << std::endl;
         }
     }
 
 private:
+    // Function to check if the user is logged in
     bool checkLogin() {
         if (!is_logged_in) {
-            std::cout << "Bitte zuerst einloggen!" << std::endl;
+            std::cout << "Please login first!" << std::endl;
             return false;
         }
         return true;
@@ -243,7 +254,7 @@ private:
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        std::cout << "Verwendung: " << argv[0] << " <ip> <port>" << std::endl;
+        std::cout << "Usage: " << argv[0] << " <ip> <port>" << std::endl;
         return 1;
     }
 
@@ -253,7 +264,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::string input;
-    std::cout << "Befehle: LOGIN, SEND, LIST, READ, DEL, QUIT" << std::endl;
+    std::cout << "Commands: LOGIN, SEND, LIST, READ, DEL, QUIT" << std::endl;
 
     while (true) {
         std::cout << "> ";
@@ -272,7 +283,7 @@ int main(int argc, char *argv[]) {
         } else if (input == "QUIT") {
             break;
         } else {
-            std::cout << "Unbekannter Befehl" << std::endl;
+            std::cout << "Unknown command" << std::endl;
         }
     }
 
