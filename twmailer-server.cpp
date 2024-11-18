@@ -231,6 +231,7 @@ private:
     // Function to handle the SEND command
     // It reads the sender, receiver, subject, and content from the client
     void handleSend(std::istringstream &iss) {
+        // Check authentication status
         if (!is_authenticated) {
             send(client_sock, "ERR\nNot logged in\n", 21, 0);
             return;
@@ -240,10 +241,7 @@ private:
         std::getline(iss, receiver);
         std::getline(iss, subject);
 
-        std::cout << "Sending message from " << current_user << " to " << receiver << std::endl;
-        std::cout << "Subject: " << subject << std::endl;
-
-        // Create the user directory for the receiver
+        // Create receiver's inbox directory if it doesn't exist
         fs::path inbox_path = fs::path(mail_spool_dir) / receiver;
         fs::create_directories(inbox_path);
 
@@ -253,7 +251,7 @@ private:
             message_number++;
         }
 
-        // Create the message file
+        // Create and open the message file
         std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
         if (!outfile) {
             std::cout << "Error creating message file." << std::endl;
@@ -261,14 +259,17 @@ private:
             return;
         }
 
+        // Write message headers
         outfile << "From: " << current_user << std::endl;
         outfile << "To: " << receiver << std::endl;
         outfile << "Subject: " << subject << std::endl << std::endl;
 
-        while (std::getline(iss, line) && line != ".") {
-            outfile << line << std::endl;
+        // Read message body until single dot is encountered
+        while (std::getline(iss, line)) {
+            if (line == ".") break;  // Stop at single dot
+            outfile << line << std::endl;  // Write message content
         }
-
+        
         outfile.close();
         send(client_sock, "OK\n", 3, 0);
     }
@@ -288,9 +289,9 @@ private:
             return;
         }
 
-        std::vector<std::pair<int, std::string>> messages;
+        std::vector <std::pair<int, std::string>> messages;
         // Collect all messages with their numbers and subjects
-        for (const auto &entry : fs::directory_iterator(inbox_path)) {
+        for (const auto &entry: fs::directory_iterator(inbox_path)) {
             std::ifstream infile(entry.path());
             std::string line;
             std::string filename = entry.path().filename().string();
@@ -388,10 +389,10 @@ private:
             }
 
             fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
-            std::vector<std::pair<int, fs::path>> messages;
+            std::vector <std::pair<int, fs::path>> messages;
 
             // Collect all messages with their file paths
-            for (const auto &entry : fs::directory_iterator(inbox_path)) {
+            for (const auto &entry: fs::directory_iterator(inbox_path)) {
                 std::string filename = entry.path().filename().string();
                 int msg_num = std::stoi(filename.substr(0, filename.find(".txt")));
                 messages.push_back({msg_num, entry.path()});
