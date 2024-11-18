@@ -311,7 +311,7 @@ private:
         std::stringstream ss;
         ss << "OK\n" << messages.size() << "\n";
         for (size_t i = 0; i < messages.size(); i++) {
-            ss << messages[i].second << "\n";
+            ss << msg.second << "\n";
         }
         ss << ".\n";
 
