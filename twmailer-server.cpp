@@ -311,9 +311,10 @@ private:
         std::stringstream ss;
         ss << "OK\n" << messages.size() << "\n";
         for (size_t i = 0; i < messages.size(); i++) {
-            ss << msg.second << "\n";
+            ss << (i + 1) << ". " << messages[i].second << "\n";  // Index + Subject
         }
         ss << ".\n";
+
 
         send(client_sock, ss.str().c_str(), ss.str().length(), 0);
         std::cout << "OK: " << messages.size() << " messages listed for user " << current_user << std::endl;
