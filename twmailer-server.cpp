@@ -283,7 +283,7 @@ private:
 
         fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
         if (!fs::exists(inbox_path) || fs::is_empty(inbox_path)) {
-            std::string error_msg = "ERR\nNo messages\n.\n";
+            std::string error_msg = "OK\n0\n.\n";
             send(client_sock, error_msg.c_str(), error_msg.length(), 0);
             return;
         }
