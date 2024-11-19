@@ -105,16 +105,11 @@ private:
 
             result.append(chunk, bytes);
 
-            // Debug-Ausgabe
-            std::cout << "Received: " << result << std::endl;
+            // Nur für Debug-Zwecke
+            std::cout << "Read: " << bytes << " bytes" << std::endl;
+            std::cout << "Content: " << result << std::endl;
 
-            // Suche nach Befehlsende
-            if (result.find("\n.\n") != std::string::npos) {
-                break;
-            }
-
-            // Für SEND-Befehl
-            if (result.starts_with("SEND\n") && result.find("\n") != std::string::npos) {
+            if (result.ends_with(".\n")) {
                 break;
             }
         }
