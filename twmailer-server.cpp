@@ -43,31 +43,33 @@ private:
     const std::string blacklist_file = "blacklist.dat";
 
     void loadBlacklist() {
-        std::lock_guard <std::mutex> lock(login_mutex); // Lock the mutex
-        std::ifstream file(blacklist_file, std::ios::binary); // Open the blacklist file
-        if (!file) return; // If the file is not found, return
+        std::lock_guard<std::mutex> lock(login_mutex);
+        std::ifstream file(blacklist_file, std::ios::binary);
+        if (!file) return;
 
-        size_t size;
-        file.read(reinterpret_cast<char *>(&size), sizeof(size)); // Read the size of the blacklist
+        try {
+            size_t size;
+            file.read(reinterpret_cast<char*>(&size), sizeof(size));
 
-        // Iterate over the blacklist
-        for (size_t i = 0; i < size; ++i) {
-            std::string ip;
-            std::chrono::system_clock::time_point timestamp;
+            for (size_t i = 0; i < size; ++i) {
+                std::string ip;
+                std::chrono::system_clock::time_point timestamp;
 
-            // Read the length of the IP address
-            size_t ip_length;
-            file.read(reinterpret_cast<char *>(&ip_length), sizeof(ip_length)); // Read the length of the IP address
-            ip.resize(ip_length);
-            file.read(&ip[0], ip_length); // Read the IP address
+                size_t ip_length;
+                file.read(reinterpret_cast<char*>(&ip_length), sizeof(ip_length));
+                ip.resize(ip_length);
+                file.read(&ip[0], ip_length);
+                file.read(reinterpret_cast<char*>(&timestamp), sizeof(timestamp));
 
-            file.read(reinterpret_cast<char *>(&timestamp), sizeof(timestamp)); // Read the timestamp
-
-            // If the timestamp is within the last minute, add the IP to the blacklist
-            auto now = std::chrono::system_clock::now();
-            if (now - timestamp < std::chrono::minutes(1)) {
-                blacklist[ip] = timestamp;
+                // Nur IPs hinzufügen, die noch gesperrt sein sollten
+                auto now = std::chrono::system_clock::now();
+                if (now - timestamp < std::chrono::minutes(1)) {
+                    blacklist[ip] = timestamp;
+                    login_attempts[ip] = 2;  // Setze die Versuche zurück
+                }
             }
+        } catch (const std::exception& e) {
+            std::cerr << "Error loading blacklist: " << e.what() << std::endl;
         }
         file.close();
     }
@@ -511,28 +513,31 @@ private:
         std::getline(iss, username);
         std::getline(iss, password);
 
-        // Get the client IP address
-        std::string client_ip = inet_ntoa(address.sin_addr);
+        // Get the client IP address from the socket
+        struct sockaddr_in addr;
+        socklen_t addr_size = sizeof(struct sockaddr_in);
+        getpeername(client_sock, (struct sockaddr *)&addr, &addr_size);
+        std::string client_ip = inet_ntoa(addr.sin_addr);
 
         {
-            std::lock_guard <std::mutex> lock(login_mutex);
-
+            std::lock_guard<std::mutex> lock(login_mutex);
+            
             // Check if the IP is blacklisted
             auto it = blacklist.find(client_ip);
             if (it != blacklist.end()) {
                 auto now = std::chrono::system_clock::now();
-                // Check if the IP is blocked
                 if (now - it->second < std::chrono::minutes(1)) {
                     send(client_sock, "ERR\nIP is blocked\n", 20, 0);
                     return;
                 }
-                blacklist.erase(it); // Remove the IP from the blacklist
+                blacklist.erase(it);
             }
 
             // Check login attempts
             if (login_attempts[client_ip] >= 2) {
                 blacklist[client_ip] = std::chrono::system_clock::now();
                 login_attempts[client_ip] = 0;
+                saveBlacklist();  // Speichere die Blacklist sofort
                 send(client_sock, "ERR\nToo many attempts\n", 22, 0);
                 return;
             }
