@@ -97,8 +97,20 @@ public:
         std::string password;
         std::cout << "Username: ";
         std::getline(std::cin, username);
+
+        // Disable echo for password input
+        struct termios old, new_term;
+        tcgetattr(STDIN_FILENO, &old);
+        new_term = old;
+        new_term.c_lflag &= ~ECHO;
+        tcsetattr(STDIN_FILENO, TCSANOW, &new_term);
+
         std::cout << "Password: ";
         std::getline(std::cin, password);
+        std::cout << "\n";
+
+        / Restore terminal settings
+        tcsetattr(STDIN_FILENO, TCSANOW, &old);
 
         try {
             // Create the message to send to the server
