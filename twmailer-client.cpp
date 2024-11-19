@@ -216,7 +216,6 @@ public:
 
             std::cout << "Message:\n";
             std::string line_buffer;
-            bool in_message = false;
 
             // Lese den Nachrichteninhalt
             while (true) {
