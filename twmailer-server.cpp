@@ -105,16 +105,14 @@ private:
 
             result.append(chunk, bytes);
 
-            // Nur für Debug-Zwecke
-            std::cout << "Read: " << bytes << " bytes" << std::endl;
-            std::cout << "Content: " << result << std::endl;
-
-            if (result.ends_with(".\n")) {
+            // Test auf Ende mit einem Punkt
+            if (result.find(".\n") != std::string::npos) {
                 break;
             }
         }
         return result;
     }
+
 
 public:
     // Constructor for the server
