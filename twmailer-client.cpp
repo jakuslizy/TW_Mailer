@@ -170,7 +170,6 @@ public:
             std::cout << "Message number: ";
             std::getline(std::cin, number);
 
-            // Validate input
             try {
                 int msg_num = std::stoi(number);
                 if (msg_num <= 0) {
@@ -182,9 +181,8 @@ public:
                 return;
             }
 
-            safeSend("READ\n" + number + "\n");
+            safeSend("READ\n" + number + "\n.\n");
 
-            // Erst OK/ERR lesen
             std::string response = safeRead();
             if (response != "OK\n") {
                 std::cout << "Error: " << response;

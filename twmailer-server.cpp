@@ -330,28 +330,34 @@ private:
         std::string message_number;
         std::getline(iss, message_number);
 
-        // Validate the message number
         try {
             int msg_num = std::stoi(message_number);
             if (msg_num <= 0) {
-                throw std::out_of_range("Negative message number");
+                send(client_sock, "ERR\nInvalid message number\n", 31, 0);
+                return;
             }
-        } catch (...) {
-            send(client_sock, "ERR\nInvalid message number\n", 31, 0);
-            return;
-        }
 
-        fs::path message_path = fs::path(mail_spool_dir) / current_user / (message_number + ".txt");
+            fs::path inbox_path = fs::path(mail_spool_dir) / current_user;
+            std::vector<std::pair<int, fs::path>> messages;
 
-        // Check if the message exists
-        if (!fs::exists(message_path)) {
-            send(client_sock, "ERR\nMessage not found\n", 28, 0);
-            return;
-        }
+            // Sammle alle Nachrichten
+            for (const auto &entry : fs::directory_iterator(inbox_path)) {
+                std::string filename = entry.path().filename().string();
+                int file_num = std::stoi(filename.substr(0, filename.find(".txt")));
+                messages.push_back({file_num, entry.path()});
+            }
 
-        // Read and send the message
-        try {
-            std::ifstream infile(message_path);
+            // Sortiere Nachrichten nach Nummer
+            std::sort(messages.begin(), messages.end());
+
+            // Überprüfe ob die Nachrichtennummer gültig ist
+            if (msg_num > static_cast<int>(messages.size())) {
+                send(client_sock, "ERR\nMessage not found\n", 28, 0);
+                return;
+            }
+
+            // Öffne und lese die Nachricht
+            std::ifstream infile(messages[msg_num - 1].second);
             if (!infile) {
                 send(client_sock, "ERR\nCannot read message\n", 30, 0);
                 return;
@@ -365,11 +371,12 @@ private:
             }
 
             send(client_sock, ".\n", 2, 0);
-
+            
             std::cout << "OK: Message " << message_number << " sent to user " << current_user << std::endl;
+
         } catch (const std::exception &e) {
-            send(client_sock, "ERR\nInternal server error\n", 26, 0);
-            std::cerr << "Error reading message: " << e.what() << std::endl;
+            send(client_sock, "ERR\nInvalid message number\n", 31, 0);
+            std::cerr << "Error handling read: " << e.what() << std::endl;
         }
     }
 
