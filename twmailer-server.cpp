@@ -43,7 +43,7 @@ private:
     const std::string blacklist_file = "blacklist.dat";
 
     void loadBlacklist() {
-        std::lock_guard <std::mutex> lock(login_mutex); // Lock the mutex
+        //std::lock_guard <std::mutex> lock(login_mutex); // Lock the mutex
         std::ifstream file(blacklist_file, std::ios::binary); // Open the blacklist file
         if (!file) return; // If the file is not found, return
 
@@ -516,6 +516,7 @@ private:
 
         {
             std::lock_guard <std::mutex> lock(login_mutex);
+            loadBlacklist();
 
             // Check if the IP is blacklisted
             auto it = blacklist.find(client_ip);
