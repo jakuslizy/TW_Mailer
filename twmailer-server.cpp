@@ -531,6 +531,7 @@ private:
                     return;
                 }
                 blacklist.erase(it);
+                login_attempts[client_ip] = 0;
             }
 
             // Check login attempts
@@ -552,6 +553,7 @@ private:
             send(client_sock, "OK\n", 3, 0);
         } else {
             login_attempts[client_ip]++;
+            saveBlacklist();
             send(client_sock, "ERR\n", 4, 0);
         }
     }
