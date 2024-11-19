@@ -17,9 +17,10 @@ private:
     // Function to safely read from the socket
     std::string safeRead() {
         std::string result;
-        const size_t chunk_size = 1024;
+        const size_t chunk_size = 1024; // Size of the chunk to read from the socket
         char chunk[chunk_size];
 
+        // Read the message from the socket
         while (true) {
             memset(chunk, 0, chunk_size);
             ssize_t bytes = read(sock, chunk, chunk_size - 1);
@@ -53,12 +54,14 @@ private:
     }
 
 public:
+    // Constructor
     TwMailerClient() : sock(0), is_logged_in(false) {}
 
     // Function to connect to the server
     bool connect(const char *address, int port) {
         struct sockaddr_in serv_addr;
 
+        // Create the socket
         if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
             std::cout << "Socket creation failed" << std::endl;
             return false;
@@ -84,11 +87,13 @@ public:
 
     // Function to login to the server
     bool login() {
+        // If the user is already logged in, return true
         if (is_logged_in) {
             std::cout << "Already logged in as: " << username << std::endl;
             return true;
         }
 
+        // Read the username and password from the console
         std::string password;
         std::cout << "Username: ";
         std::getline(std::cin, username);
@@ -96,10 +101,13 @@ public:
         std::getline(std::cin, password);
 
         try {
+            // Create the message to send to the server
             std::string message = "LOGIN\n" + username + "\n" + password + "\n.\n";
             safeSend(message);
+            // Read the response from the server
             std::string response = safeRead();
 
+            // Check if the login was successful
             if (response.find("OK\n") != std::string::npos) {
                 is_logged_in = true;
                 std::cout << "Login successful!" << std::endl;
@@ -119,10 +127,12 @@ public:
         if (!checkLogin()) return;
 
         try {
+            // Read the receiver and subject from the console
             std::string receiver, subject;
             std::cout << "Receiver: ";
             std::getline(std::cin, receiver);
 
+            // Read the subject from the console
             std::cout << "Subject (max 80 characters): ";
             std::getline(std::cin, subject);
             if (subject.length() > 80) {
@@ -130,9 +140,11 @@ public:
                 return;
             }
 
+            // Create the message to send to the server
             std::string message = "SEND\n" + receiver + "\n" + subject + "\n";
             std::cout << "Message (end with a single '.' in a new line):\n";
-            
+
+            // Read the message from the console
             std::string line;
             while (std::getline(std::cin, line)) {
                 if (line == ".") break;
@@ -140,7 +152,9 @@ public:
             }
             message += ".\n";
 
+            // Send the message to the server
             safeSend(message);
+            // Read the response from the server
             std::string response = safeRead();
             std::cout << "Server response: " << response;
         } catch (const std::exception &e) {
@@ -153,7 +167,9 @@ public:
         if (!checkLogin()) return;
 
         try {
+            // Create the message to send to the server
             safeSend("LIST\n.\n");
+            // Read the response from the server
             std::string response = safeRead();
             std::cout << "Your messages:\n" << response;
         } catch (const std::exception &e) {
@@ -166,11 +182,13 @@ public:
         if (!checkLogin()) return;
 
         try {
+            // Read the message number from the console
             std::string number;
             std::cout << "Message number: ";
             std::getline(std::cin, number);
 
             try {
+                // Convert the message number to an integer
                 int msg_num = std::stoi(number);
                 if (msg_num <= 0) {
                     std::cout << "Invalid message number" << std::endl;
@@ -181,23 +199,30 @@ public:
                 return;
             }
 
+            // Create the message to send to the server
             safeSend("READ\n" + number + "\n.\n");
-            
+
+            // Read the response from the server
             std::string response;
+            // Size of the chunk to read from the socket
             const size_t chunk_size = 1024;
             char chunk[chunk_size];
+            // Flag to check if the message has started
             bool messageStarted = false;
+            // String stream to store the full message
             std::stringstream fullMessage;
 
             while (true) {
                 memset(chunk, 0, chunk_size);
+                // Read the message from the socket
                 ssize_t bytes = read(sock, chunk, chunk_size - 1);
-                
+
                 if (bytes <= 0) break;
-                
+                // Append the message to the response
                 response.append(chunk, bytes);
-                
+
                 if (!messageStarted) {
+                    // Check if the message has started
                     if (response.find("OK\n") != std::string::npos) {
                         messageStarted = true;
                         size_t start = response.find("OK\n") + 3;
@@ -207,20 +232,24 @@ public:
                         return;
                     }
                 } else {
+                    // Append the message to the full message
                     fullMessage << chunk;
                 }
 
+                // Check if the message has ended
                 if (response.find("\n.\n") != std::string::npos) {
                     break;
                 }
             }
 
+            // Get the final message
             std::string finalMessage = fullMessage.str();
             size_t endPos = finalMessage.find("\n.\n");
             if (endPos != std::string::npos) {
                 finalMessage = finalMessage.substr(0, endPos);
             }
 
+            // Print the final message
             std::cout << finalMessage << std::endl;
 
         } catch (const std::exception &e) {
@@ -249,13 +278,15 @@ public:
                 return;
             }
 
+            // Create the message to send to the server
             safeSend("DEL\n" + number + "\n.\n");
+            // Read the response from the server
             std::string response = safeRead();
 
             if (response.find("OK\n") != std::string::npos) {
                 std::cout << "Message deleted successfully" << std::endl;
             } else {
-                std::string error = response.substr(4); // Remove "ERR\n"
+                std::string error = response.substr(4);
                 std::cout << "Deletion error: " << error;
             }
         } catch (const std::exception &e) {
