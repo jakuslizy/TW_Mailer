@@ -106,7 +106,7 @@ private:
             result.append(chunk, bytes);
 
             // Check if the message is complete (ends with ".\n")
-            if (result.find("\n.\n") != std::string::npos) {
+            if (result.find(".\n") != std::string::npos) {
                 break;
             }
         }
