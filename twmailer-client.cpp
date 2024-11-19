@@ -114,7 +114,14 @@ public:
                 std::cout << "Login successful!" << std::endl;
                 return true;
             } else {
-                std::cout << "Login failed: " << response << std::endl;
+                // Neue Bedingungen für verschiedene Fehlermeldungen
+                if (response.find("ERR\nIP is blocked\n") != std::string::npos) {
+                    std::cout << "Login failed: IP is blocked for 1 minute" << std::endl;
+                } else if (response.find("ERR\nToo many attempts\n") != std::string::npos) {
+                    std::cout << "Login failed: Too many attempts. IP will be blocked for 1 minute" << std::endl;
+                } else {
+                    std::cout << "Login failed: " << response;
+                }
                 return false;
             }
         } catch (const std::exception &e) {
