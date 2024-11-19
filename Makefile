@@ -18,7 +18,6 @@ twmailer-client: twmailer-client.cpp
 # Clean build files
 clean:
 	rm -f twmailer-server twmailer-client
-	rm -f blacklist.dat
 
 # Install required packages (Ubuntu/Debian)
 install-deps:
