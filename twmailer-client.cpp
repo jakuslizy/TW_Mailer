@@ -189,20 +189,58 @@ public:
                 return;
             }
 
-            safeSend("READ\n" + number + "\n.\n");
+            safeSend("READ\n" + number + "\n");
 
-            std::string response = safeRead();
+            // Lese erst die OK-Bestätigung
+            const size_t chunk_size = 1024;
+            char chunk[chunk_size];
+            std::string response;
+
+            while (true) {
+                memset(chunk, 0, chunk_size);
+                ssize_t bytes = read(sock, chunk, chunk_size - 1);
+
+                if (bytes <= 0) break;
+
+                response.append(chunk, bytes);
+                if (response.find("OK\n") != std::string::npos ||
+                    response.find("ERR\n") != std::string::npos) {
+                    break;
+                }
+            }
+
             if (response != "OK\n") {
                 std::cout << "Error: " << response;
                 return;
             }
 
             std::cout << "Message:\n";
+            std::string line_buffer;
+            bool in_message = false;
+
+            // Lese den Nachrichteninhalt
             while (true) {
-                std::string line = safeRead();
-                if (line == ".\n") break;  // Ende der Nachricht
-                std::cout << line;  // line enthält bereits \n
+                memset(chunk, 0, chunk_size);
+                ssize_t bytes = read(sock, chunk, chunk_size - 1);
+
+                if (bytes <= 0) break;
+
+                line_buffer.append(chunk, bytes);
+
+                // Verarbeite vollständige Zeilen
+                size_t pos;
+                while ((pos = line_buffer.find('\n')) != std::string::npos) {
+                    std::string line = line_buffer.substr(0, pos);
+
+                    if (line == ".") {
+                        return;  // Ende der Nachricht
+                    }
+
+                    std::cout << line << std::endl;
+                    line_buffer = line_buffer.substr(pos + 1);
+                }
             }
+
         } catch (const std::exception &e) {
             std::cerr << "Reading error: " << e.what() << std::endl;
         }
