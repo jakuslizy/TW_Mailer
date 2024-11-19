@@ -183,36 +183,45 @@ public:
 
             safeSend("READ\n" + number + "\n.\n");
             
-            // Lese die erste Antwort (OK oder ERR)
-            std::string response = safeRead();
-            if (response.find("OK\n") == std::string::npos) {
-                std::cout << "Error: " << response;
-                return;
-            }
+            std::string response;
+            const size_t chunk_size = 1024;
+            char chunk[chunk_size];
+            bool messageStarted = false;
+            std::stringstream fullMessage;
 
-            std::cout << "Message:\n";
-            std::string message;
-            bool endFound = false;
-
-            while (!endFound) {
-                const size_t chunk_size = 1024;
-                char chunk[chunk_size];
+            while (true) {
                 memset(chunk, 0, chunk_size);
-                
                 ssize_t bytes = read(sock, chunk, chunk_size - 1);
-                if (bytes <= 0) break;
-
-                message.append(chunk, bytes);
                 
-                // Suche nach dem Ende der Nachricht
-                if (message.find("\n.\n") != std::string::npos) {
-                    size_t pos = message.find("\n.\n");
-                    message = message.substr(0, pos);
-                    endFound = true;
+                if (bytes <= 0) break;
+                
+                response.append(chunk, bytes);
+                
+                if (!messageStarted) {
+                    if (response.find("OK\n") != std::string::npos) {
+                        messageStarted = true;
+                        size_t start = response.find("OK\n") + 3;
+                        fullMessage << response.substr(start);
+                    } else if (response.find("ERR\n") != std::string::npos) {
+                        std::cout << "Error: " << response;
+                        return;
+                    }
+                } else {
+                    fullMessage << chunk;
+                }
+
+                if (response.find("\n.\n") != std::string::npos) {
+                    break;
                 }
             }
 
-            std::cout << message << std::endl;
+            std::string finalMessage = fullMessage.str();
+            size_t endPos = finalMessage.find("\n.\n");
+            if (endPos != std::string::npos) {
+                finalMessage = finalMessage.substr(0, endPos);
+            }
+
+            std::cout << finalMessage << std::endl;
 
         } catch (const std::exception &e) {
             std::cerr << "Reading error: " << e.what() << std::endl;
@@ -304,3 +313,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
