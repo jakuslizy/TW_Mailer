@@ -17,9 +17,10 @@ private:
     // Function to safely read from the socket
     std::string safeRead() {
         std::string result;
-        const size_t chunk_size = 1024;
+        const size_t chunk_size = 1024; // Size of the chunk to read from the socket
         char chunk[chunk_size];
 
+        // Read the message from the socket
         while (true) {
             memset(chunk, 0, chunk_size);
             ssize_t bytes = read(sock, chunk, chunk_size - 1);
@@ -28,12 +29,9 @@ private:
 
             result.append(chunk, bytes);
 
-            // Prüfe auf verschiedene Antworttypen
-            if (result.find("\n.\n") != std::string::npos ||
-                result == "OK\n" ||
-                result == "ERR\n" ||
-                result == "ERR\nIP is blocked\n" ||
-                result == "ERR\nToo many attempts\n") {
+            // Check if the message is complete
+            if (result.find("OK\n") != std::string::npos ||
+                result.find("ERR\n") != std::string::npos) {
                 break;
             }
         }
@@ -115,14 +113,7 @@ public:
                 std::cout << "Login successful!" << std::endl;
                 return true;
             } else {
-                // Neue Bedingungen für verschiedene Fehlermeldungen
-                if (response.find("ERR\nIP is blocked\n") != std::string::npos) {
-                    std::cout << "Login failed: IP is blocked for 1 minute" << std::endl;
-                } else if (response.find("ERR\nToo many attempts\n") != std::string::npos) {
-                    std::cout << "Login failed: Too many attempts. IP will be blocked for 1 minute" << std::endl;
-                } else {
-                    std::cout << "Login failed: " << response;
-                }
+                std::cout << "Login failed: " << response << std::endl;
                 return false;
             }
         } catch (const std::exception &e) {
