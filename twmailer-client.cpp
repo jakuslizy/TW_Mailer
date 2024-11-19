@@ -126,9 +126,8 @@ public:
     void sendMail() {
         if (!checkLogin()) return;
 
-        // Try to send a mail
         try {
-            std::string receiver, subject, content;
+            std::string receiver, subject;
             std::cout << "Receiver: ";
             std::getline(std::cin, receiver);
 
@@ -139,20 +138,28 @@ public:
                 return;
             }
 
+            // Sende SEND-Kommando und Metadaten
+            std::string header = "SEND\n" + receiver + "\n" + subject + "\n";
+            safeSend(header);
+
+            // Lese und sende die Nachricht zeilenweise
             std::cout << "Message (end with a single '.' in a new line):\n";
-            std::string message = "SEND\n" + receiver + "\n" + subject + "\n";
-
             std::string line;
-            while (std::getline(std::cin, line) && line != ".") {
-                message += line + "\n";
+            while (std::getline(std::cin, line)) {
+                safeSend(line + "\n");
+                if (line == ".") break;
             }
-            message += ".\n";
+        } catch (const std::exception &e) {
+            std::cerr << "Sending error: " << e.what() << std::endl;
+            return;
+        }
 
-            safeSend(message);
+        // Lese die Server-Antwort
+        try {
             std::string response = safeRead();
             std::cout << "Server response: " << response;
         } catch (const std::exception &e) {
-            std::cerr << "Sending error: " << e.what() << std::endl;
+            std::cerr << "Error receiving response: " << e.what() << std::endl;
         }
     }
 

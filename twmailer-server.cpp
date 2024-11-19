@@ -237,7 +237,7 @@ private:
             return;
         }
 
-        std::string receiver, subject, line;
+        std::string receiver, subject;
         std::getline(iss, receiver);
         std::getline(iss, subject);
 
@@ -254,8 +254,7 @@ private:
         // Create and open the message file
         std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
         if (!outfile) {
-            std::cout << "Error creating message file." << std::endl;
-            send(client_sock, "ERR\n", 4, 0);
+            send(client_sock, "ERR\nCannot create message file\n", 30, 0);
             return;
         }
 
@@ -266,9 +265,12 @@ private:
 
         // Read message body until single dot is encountered
         while (std::getline(iss, line)) {
-            if (line == ".") break;  // Stop at single dot
-            outfile << line << std::endl;  // Write message content
-        }
+            std::string line;
+            while (true) {
+                line = safeRead();
+                if (line == ".\n") break;
+                outfile << line;
+            }
         
         outfile.close();
         send(client_sock, "OK\n", 3, 0);
