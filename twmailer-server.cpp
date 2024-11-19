@@ -97,16 +97,15 @@ private:
         const size_t chunk_size = 1024;
         char chunk[chunk_size];
 
-        // Read the message from the client
         while (true) {
-            memset(chunk, 0, chunk_size); // Clear the chunk
+            memset(chunk, 0, chunk_size);
             ssize_t bytes = read(client_sock, chunk, chunk_size - 1);
 
             if (bytes <= 0) break;
 
             result.append(chunk, bytes);
 
-            // Check if the message is complete
+            // Check if the message is complete (ends with ".\n")
             if (result.find("\n.\n") != std::string::npos) {
                 break;
             }
@@ -224,7 +223,6 @@ private:
     // Function to handle the SEND command
     // It reads the sender, receiver, subject, and content from the client
     void handleSend(std::istringstream &iss) {
-        // Check authentication status
         if (!is_authenticated) {
             send(client_sock, "ERR\nNot logged in\n", 21, 0);
             return;
@@ -234,32 +232,27 @@ private:
         std::getline(iss, receiver);
         std::getline(iss, subject);
 
-        // Create receiver's inbox directory if it doesn't exist
         fs::path inbox_path = fs::path(mail_spool_dir) / receiver;
         fs::create_directories(inbox_path);
 
-        // Find the next free message number
         int message_number = 1;
         while (fs::exists(inbox_path / (std::to_string(message_number) + ".txt"))) {
             message_number++;
         }
 
-        // Create and open the message file
         std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
         if (!outfile) {
             send(client_sock, "ERR\nCannot create message file\n", 30, 0);
             return;
         }
 
-        // Write message headers
         outfile << "From: " << current_user << std::endl;
         outfile << "To: " << receiver << std::endl;
         outfile << "Subject: " << subject << std::endl << std::endl;
 
-        // Read message content line by line
+        std::string buffer;
         const size_t chunk_size = 1024;
         char chunk[chunk_size];
-        std::string line;
 
         while (true) {
             memset(chunk, 0, chunk_size);
@@ -271,26 +264,20 @@ private:
                 return;
             }
 
-            line.append(chunk, bytes);
+            buffer.append(chunk, bytes);
 
-            // Look for newline
-            size_t pos = line.find('\n');
-            while (pos != std::string::npos) {
-                std::string current_line = line.substr(0, pos);
+            size_t pos;
+            while ((pos = buffer.find('\n')) != std::string::npos) {
+                std::string current_line = buffer.substr(0, pos);
+                buffer = buffer.substr(pos + 1);
 
-                // Check for end of message
                 if (current_line == ".") {
                     outfile.close();
                     send(client_sock, "OK\n", 3, 0);
                     return;
                 }
 
-                // Write the line to file
                 outfile << current_line << std::endl;
-
-                // Remove processed line from buffer
-                line = line.substr(pos + 1);
-                pos = line.find('\n');
             }
         }
     }

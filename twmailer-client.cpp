@@ -130,28 +130,20 @@ public:
                 return;
             }
 
-            // Sende SEND-Kommando und Metadaten
             std::string header = "SEND\n" + receiver + "\n" + subject + "\n";
             safeSend(header);
 
-            // Lese und sende die Nachricht zeilenweise
             std::cout << "Message (end with a single '.' in a new line):\n";
             std::string line;
             while (std::getline(std::cin, line)) {
                 safeSend(line + "\n");
                 if (line == ".") break;
             }
-        } catch (const std::exception &e) {
-            std::cerr << "Sending error: " << e.what() << std::endl;
-            return;
-        }
 
-        // Lese die Server-Antwort
-        try {
             std::string response = safeRead();
             std::cout << "Server response: " << response;
         } catch (const std::exception &e) {
-            std::cerr << "Error receiving response: " << e.what() << std::endl;
+            std::cerr << "Sending error: " << e.what() << std::endl;
         }
     }
 
@@ -191,55 +183,37 @@ public:
 
             safeSend("READ\n" + number + "\n");
 
-            // Lese erst die OK-Bestätigung
-            const size_t chunk_size = 1024;
-            char chunk[chunk_size];
-            std::string response;
-
-            while (true) {
-                memset(chunk, 0, chunk_size);
-                ssize_t bytes = read(sock, chunk, chunk_size - 1);
-
-                if (bytes <= 0) break;
-
-                response.append(chunk, bytes);
-                if (response.find("OK\n") != std::string::npos ||
-                    response.find("ERR\n") != std::string::npos) {
-                    break;
-                }
-            }
-
+            // Erst OK/ERR lesen
+            std::string response = safeRead();
             if (response != "OK\n") {
                 std::cout << "Error: " << response;
                 return;
             }
 
             std::cout << "Message:\n";
-            std::string line_buffer;
+            std::string buffer;
+            const size_t chunk_size = 1024;
+            char chunk[chunk_size];
 
-            // Lese den Nachrichteninhalt
             while (true) {
                 memset(chunk, 0, chunk_size);
                 ssize_t bytes = read(sock, chunk, chunk_size - 1);
 
                 if (bytes <= 0) break;
 
-                line_buffer.append(chunk, bytes);
+                buffer.append(chunk, bytes);
 
-                // Verarbeite vollständige Zeilen
                 size_t pos;
-                while ((pos = line_buffer.find('\n')) != std::string::npos) {
-                    std::string line = line_buffer.substr(0, pos);
+                while ((pos = buffer.find('\n')) != std::string::npos) {
+                    std::string line = buffer.substr(0, pos);
+                    buffer = buffer.substr(pos + 1);
 
                     if (line == ".") {
-                        return;  // Ende der Nachricht
+                        return;
                     }
-
                     std::cout << line << std::endl;
-                    line_buffer = line_buffer.substr(pos + 1);
                 }
             }
-
         } catch (const std::exception &e) {
             std::cerr << "Reading error: " << e.what() << std::endl;
         }
