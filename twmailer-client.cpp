@@ -110,7 +110,7 @@ public:
         std::getline(std::cin, password);
         std::cout << "\n";
 
-        / Restore terminal settings
+        // Restore terminal settings
         tcsetattr(STDIN_FILENO, TCSANOW, &old);
 
         try {
