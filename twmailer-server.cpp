@@ -514,42 +514,41 @@ private:
         // Get the client IP address
         std::string client_ip = inet_ntoa(address.sin_addr);
 
-        {
-            std::lock_guard <std::mutex> lock(login_mutex);
-            loadBlacklist();
 
-            // Check if the IP is blacklisted
-            auto it = blacklist.find(client_ip);
-            if (it != blacklist.end()) {
-                auto now = std::chrono::system_clock::now();
-                // Check if the IP is blocked
-                if (now - it->second < std::chrono::minutes(1)) {
-                    send(client_sock, "ERR\nIP is blocked\n", 20, 0);
-                    return;
-                }
-                blacklist.erase(it); // Remove the IP from the blacklist
-            }
+        std::lock_guard <std::mutex> lock(login_mutex);
+        loadBlacklist();
 
-            // Check login attempts
-            if (login_attempts[client_ip] >= 2) {
-                blacklist[client_ip] = std::chrono::system_clock::now();
-                login_attempts[client_ip] = 0;
-
-                std::ofstream file(blacklist_file, std::ios::binary);
-                if (file) {
-                    size_t size = blacklist.size();
-                    file.write(reinterpret_cast<const char *>(&size), sizeof(size));
-                    for (const auto &[ip, time]: blacklist) {
-                        size_t ip_length = ip.length();
-                        file.write(reinterpret_cast<const char *>(&ip_length), sizeof(ip_length));
-                        file.write(ip.c_str(), ip_length);
-                        file.write(reinterpret_cast<const char *>(&time), sizeof(time));
-                    }
-                }
-
-                send(client_sock, "ERR\nToo many attempts\n", 22, 0);
+        // Check if the IP is blacklisted
+        auto it = blacklist.find(client_ip);
+        if (it != blacklist.end()) {
+            auto now = std::chrono::system_clock::now();
+            // Check if the IP is blocked
+            if (now - it->second < std::chrono::minutes(1)) {
+                send(client_sock, "ERR\nIP is blocked\n", 20, 0);
                 return;
             }
+            blacklist.erase(it); // Remove the IP from the blacklist
+        }
+
+        // Check login attempts
+        if (login_attempts[client_ip] >= 2) {
+            blacklist[client_ip] = std::chrono::system_clock::now();
+            login_attempts[client_ip] = 0;
+
+            std::ofstream file(blacklist_file, std::ios::binary);
+            if (file) {
+                size_t size = blacklist.size();
+                file.write(reinterpret_cast<const char *>(&size), sizeof(size));
+                for (const auto &[ip, time]: blacklist) {
+                    size_t ip_length = ip.length();
+                    file.write(reinterpret_cast<const char *>(&ip_length), sizeof(ip_length));
+                    file.write(ip.c_str(), ip_length);
+                    file.write(reinterpret_cast<const char *>(&time), sizeof(time));
+                }
+            }
+
+            send(client_sock, "ERR\nToo many attempts\n", 22, 0);
+            return;
         }
 
         // Check the LDAP credentials
