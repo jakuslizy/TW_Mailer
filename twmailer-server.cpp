@@ -533,6 +533,19 @@ private:
             if (login_attempts[client_ip] >= 2) {
                 blacklist[client_ip] = std::chrono::system_clock::now();
                 login_attempts[client_ip] = 0;
+
+                std::ofstream file(blacklist_file, std::ios::binary);
+                if (file) {
+                    size_t size = blacklist.size();
+                    file.write(reinterpret_cast<const char*>(&size), sizeof(size));
+                    for (const auto& [ip, time] : blacklist) {
+                        size_t ip_length = ip.length();
+                        file.write(reinterpret_cast<const char*>(&ip_length), sizeof(ip_length));
+                        file.write(ip.c_str(), ip_length);
+                        file.write(reinterpret_cast<const char*>(&time), sizeof(time));
+                    }
+                }
+
                 send(client_sock, "ERR\nToo many attempts\n", 22, 0);
                 return;
             }
