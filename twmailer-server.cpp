@@ -363,14 +363,15 @@ private:
                 return;
             }
 
+            // Lese die gesamte Nachricht in einen String
+            std::stringstream buffer;
+            buffer << infile.rdbuf();
+            std::string message = buffer.str();
+
+            // Sende OK und dann die Nachricht
             send(client_sock, "OK\n", 3, 0);
-
-            std::string line;
-            while (std::getline(infile, line)) {
-                send(client_sock, (line + "\n").c_str(), line.length() + 1, 0);
-            }
-
-            send(client_sock, ".\n", 2, 0);
+            send(client_sock, message.c_str(), message.length(), 0);
+            send(client_sock, "\n.\n", 3, 0);  // Sende Nachrichtenende-Markierung
             
             std::cout << "OK: Message " << message_number << " sent to user " << current_user << std::endl;
 
