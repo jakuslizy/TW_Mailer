@@ -29,10 +29,11 @@ private:
             result.append(chunk, bytes);
 
             // Prüfe auf verschiedene Antworttypen
-            if (result.find("OK\n") != std::string::npos ||
-                result.find("ERR\n") != std::string::npos ||
-                result.find("ERR\nIP is blocked\n") != std::string::npos ||
-                result.find("ERR\nToo many attempts\n") != std::string::npos) {
+            if (result.find("\n.\n") != std::string::npos ||
+                result == "OK\n" ||
+                result == "ERR\n" ||
+                result == "ERR\nIP is blocked\n" ||
+                result == "ERR\nToo many attempts\n") {
                 break;
             }
         }
