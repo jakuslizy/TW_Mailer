@@ -229,57 +229,46 @@ private:
             return;
         }
 
-        std::string receiver, subject;
-        std::getline(iss, receiver);
-        std::getline(iss, subject);
+        try {
+            std::string receiver, subject;
+            std::getline(iss, receiver);
+            std::getline(iss, subject);
 
-        fs::path inbox_path = fs::path(mail_spool_dir) / receiver;
-        fs::create_directories(inbox_path);
-
-        int message_number = 1;
-        while (fs::exists(inbox_path / (std::to_string(message_number) + ".txt"))) {
-            message_number++;
-        }
-
-        std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
-        if (!outfile) {
-            send(client_sock, "ERR\nCannot create message file\n", 30, 0);
-            return;
-        }
-
-        outfile << "From: " << current_user << std::endl;
-        outfile << "To: " << receiver << std::endl;
-        outfile << "Subject: " << subject << std::endl << std::endl;
-
-        std::string buffer;
-        const size_t chunk_size = 1024;
-        char chunk[chunk_size];
-
-        while (true) {
-            memset(chunk, 0, chunk_size);
-            ssize_t bytes = read(client_sock, chunk, chunk_size - 1);
-
-            if (bytes <= 0) {
-                outfile.close();
-                send(client_sock, "ERR\nConnection interrupted\n", 26, 0);
+            if (subject.length() > 80) {
+                send(client_sock, "ERR\nSubject too long\n", 20, 0);
                 return;
             }
 
-            buffer.append(chunk, bytes);
+            fs::path inbox_path = fs::path(mail_spool_dir) / receiver;
+            fs::create_directories(inbox_path);
 
-            size_t pos;
-            while ((pos = buffer.find('\n')) != std::string::npos) {
-                std::string current_line = buffer.substr(0, pos);
-                buffer = buffer.substr(pos + 1);
-
-                if (current_line == ".") {
-                    outfile.close();
-                    send(client_sock, "OK\n", 3, 0);
-                    return;
-                }
-
-                outfile << current_line << std::endl;
+            int message_number = 1;
+            while (fs::exists(inbox_path / (std::to_string(message_number) + ".txt"))) {
+                message_number++;
             }
+
+            std::ofstream outfile(inbox_path / (std::to_string(message_number) + ".txt"));
+            if (!outfile) {
+                send(client_sock, "ERR\nCannot create message file\n", 30, 0);
+                return;
+            }
+
+            outfile << "From: " << current_user << std::endl;
+            outfile << "To: " << receiver << std::endl;
+            outfile << "Subject: " << subject << std::endl << std::endl;
+
+            std::string line;
+            while (std::getline(iss, line)) {
+                if (line == ".") break;
+                outfile << line << std::endl;
+            }
+
+            outfile.close();
+            send(client_sock, "OK\n", 3, 0);
+            
+        } catch (const std::exception &e) {
+            send(client_sock, "ERR\nInternal server error\n", 25, 0);
+            std::cerr << "Error handling send: " << e.what() << std::endl;
         }
     }
 

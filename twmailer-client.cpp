@@ -130,17 +130,17 @@ public:
                 return;
             }
 
-            safeSend("SEND\n" + receiver + "\n" + subject + "\n");
-
+            std::string message = "SEND\n" + receiver + "\n" + subject + "\n";
             std::cout << "Message (end with a single '.' in a new line):\n";
+            
             std::string line;
             while (std::getline(std::cin, line)) {
-                safeSend(line + "\n");
-                if (line == ".") {
-                    break;
-                }
+                if (line == ".") break;
+                message += line + "\n";
             }
+            message += ".\n";
 
+            safeSend(message);
             std::string response = safeRead();
             std::cout << "Server response: " << response;
         } catch (const std::exception &e) {
