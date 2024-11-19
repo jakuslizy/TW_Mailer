@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sstream>
 #include <algorithm>
+#include <termios.h>
 
 // Class for the client
 // It handles the connection to the server and the communication with the server
