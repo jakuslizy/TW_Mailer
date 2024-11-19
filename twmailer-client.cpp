@@ -19,20 +19,12 @@ private:
         std::string result;
         const size_t chunk_size = 1024;
         char chunk[chunk_size];
-        size_t total_bytes = 0;
-        const size_t max_size = 100 * 1024 * 1024; // 100MB Limit
 
         while (true) {
             memset(chunk, 0, chunk_size);
             ssize_t bytes = read(sock, chunk, chunk_size - 1);
 
             if (bytes <= 0) break;
-
-            // Update total bytes read
-            total_bytes += bytes;
-            if (total_bytes > max_size) {
-                throw std::runtime_error("Message too large");
-            }
 
             result.append(chunk, bytes);
 
@@ -198,16 +190,18 @@ public:
             }
 
             safeSend("READ\n" + number + "\n.\n");
-            std::string response = safeRead();
 
-            // Check response format
-            if (response.substr(0, 3) == "OK\n") {
-                // Remove "OK\n" from the beginning and ".\n" from the end
-                response = response.substr(3, response.length() - 5);
-                std::cout << "Message:\n" << response;
-            } else {
-                // Show error message
+            std::string response = safeRead();
+            if (response != "OK\n") {
                 std::cout << "Error: " << response;
+                return;
+            }
+
+            std::cout << "Message:\n";
+            while (true) {
+                std::string line = safeRead();
+                if (line == ".\n") break;  // Ende der Nachricht
+                std::cout << line;  // line enthält bereits \n
             }
         } catch (const std::exception &e) {
             std::cerr << "Reading error: " << e.what() << std::endl;

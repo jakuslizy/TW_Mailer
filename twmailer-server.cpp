@@ -96,8 +96,6 @@ private:
         std::string result;
         const size_t chunk_size = 1024;
         char chunk[chunk_size];
-        size_t total_bytes = 0;
-        const size_t max_size = 100 * 1024 * 1024; // 100MB Limit
 
         // Read the message from the client
         while (true) {
@@ -105,11 +103,6 @@ private:
             ssize_t bytes = read(client_sock, chunk, chunk_size - 1);
 
             if (bytes <= 0) break;
-
-            total_bytes += bytes;
-            if (total_bytes > max_size) {
-                throw std::runtime_error("Message too large");
-            }
 
             result.append(chunk, bytes);
 
@@ -263,17 +256,43 @@ private:
         outfile << "To: " << receiver << std::endl;
         outfile << "Subject: " << subject << std::endl << std::endl;
 
-        // Read message body until single dot is encountered
-        while (std::getline(iss, line)) {
-            std::string line;
-            while (true) {
-                line = safeRead();
-                if (line == ".\n") break;
-                outfile << line;
+        // Read message content line by line
+        const size_t chunk_size = 1024;
+        char chunk[chunk_size];
+        std::string line;
+
+        while (true) {
+            memset(chunk, 0, chunk_size);
+            ssize_t bytes = read(client_sock, chunk, chunk_size - 1);
+
+            if (bytes <= 0) {
+                outfile.close();
+                send(client_sock, "ERR\nConnection interrupted\n", 26, 0);
+                return;
             }
-        
-        outfile.close();
-        send(client_sock, "OK\n", 3, 0);
+
+            line.append(chunk, bytes);
+
+            // Look for newline
+            size_t pos = line.find('\n');
+            while (pos != std::string::npos) {
+                std::string current_line = line.substr(0, pos);
+
+                // Check for end of message
+                if (current_line == ".") {
+                    outfile.close();
+                    send(client_sock, "OK\n", 3, 0);
+                    return;
+                }
+
+                // Write the line to file
+                outfile << current_line << std::endl;
+
+                // Remove processed line from buffer
+                line = line.substr(pos + 1);
+                pos = line.find('\n');
+            }
+        }
     }
 
     // Function to handle the LIST command
@@ -361,11 +380,15 @@ private:
                 return;
             }
 
-            std::stringstream ss;
-            ss << "OK\n" << infile.rdbuf() << ".\n";
+            send(client_sock, "OK\n", 3, 0);
 
-            std::string response = ss.str();
-            send(client_sock, response.c_str(), response.length(), 0);
+            std::string line;
+            while (std::getline(infile, line)) {
+                send(client_sock, (line + "\n").c_str(), line.length() + 1, 0);
+            }
+
+            send(client_sock, ".\n", 2, 0);
+
             std::cout << "OK: Message " << message_number << " sent to user " << current_user << std::endl;
         } catch (const std::exception &e) {
             send(client_sock, "ERR\nInternal server error\n", 26, 0);
