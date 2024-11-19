@@ -185,7 +185,7 @@ public:
             
             // Lese die erste Antwort (OK oder ERR)
             std::string response = safeRead();
-            if (response != "OK\n") {
+            if (response.find("OK\n") == std::string::npos) {
                 std::cout << "Error: " << response;
                 return;
             }
@@ -205,19 +205,14 @@ public:
                 message.append(chunk, bytes);
                 
                 // Suche nach dem Ende der Nachricht
-                size_t pos = message.find("\n.\n");
-                if (pos != std::string::npos) {
+                if (message.find("\n.\n") != std::string::npos) {
+                    size_t pos = message.find("\n.\n");
                     message = message.substr(0, pos);
                     endFound = true;
                 }
             }
 
-            // Ausgabe der kompletten Nachricht
-            std::istringstream iss(message);
-            std::string line;
-            while (std::getline(iss, line)) {
-                std::cout << line << std::endl;
-            }
+            std::cout << message << std::endl;
 
         } catch (const std::exception &e) {
             std::cerr << "Reading error: " << e.what() << std::endl;
