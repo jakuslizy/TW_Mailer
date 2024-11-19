@@ -538,12 +538,12 @@ private:
                 std::ofstream file(blacklist_file, std::ios::binary);
                 if (file) {
                     size_t size = blacklist.size();
-                    file.write(reinterpret_cast<const char*>(&size), sizeof(size));
-                    for (const auto& [ip, time] : blacklist) {
+                    file.write(reinterpret_cast<const char *>(&size), sizeof(size));
+                    for (const auto &[ip, time]: blacklist) {
                         size_t ip_length = ip.length();
-                        file.write(reinterpret_cast<const char*>(&ip_length), sizeof(ip_length));
+                        file.write(reinterpret_cast<const char *>(&ip_length), sizeof(ip_length));
                         file.write(ip.c_str(), ip_length);
-                        file.write(reinterpret_cast<const char*>(&time), sizeof(time));
+                        file.write(reinterpret_cast<const char *>(&time), sizeof(time));
                     }
                 }
 
