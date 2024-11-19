@@ -17,10 +17,9 @@ private:
     // Function to safely read from the socket
     std::string safeRead() {
         std::string result;
-        const size_t chunk_size = 1024; // Size of the chunk to read from the socket
+        const size_t chunk_size = 1024;
         char chunk[chunk_size];
 
-        // Read the message from the socket
         while (true) {
             memset(chunk, 0, chunk_size);
             ssize_t bytes = read(sock, chunk, chunk_size - 1);
@@ -29,9 +28,11 @@ private:
 
             result.append(chunk, bytes);
 
-            // Check if the message is complete
+            // Prüfe auf verschiedene Antworttypen
             if (result.find("OK\n") != std::string::npos ||
-                result.find("ERR\n") != std::string::npos) {
+                result.find("ERR\n") != std::string::npos ||
+                result.find("ERR\nIP is blocked\n") != std::string::npos ||
+                result.find("ERR\nToo many attempts\n") != std::string::npos) {
                 break;
             }
         }
