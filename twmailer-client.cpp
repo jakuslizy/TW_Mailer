@@ -182,7 +182,8 @@ public:
             }
 
             safeSend("READ\n" + number + "\n.\n");
-
+            
+            // Lese die erste Antwort (OK oder ERR)
             std::string response = safeRead();
             if (response != "OK\n") {
                 std::cout << "Error: " << response;
@@ -190,29 +191,34 @@ public:
             }
 
             std::cout << "Message:\n";
-            std::string buffer;
-            const size_t chunk_size = 1024;
-            char chunk[chunk_size];
+            std::string message;
+            bool endFound = false;
 
-            while (true) {
+            while (!endFound) {
+                const size_t chunk_size = 1024;
+                char chunk[chunk_size];
                 memset(chunk, 0, chunk_size);
+                
                 ssize_t bytes = read(sock, chunk, chunk_size - 1);
-
                 if (bytes <= 0) break;
 
-                buffer.append(chunk, bytes);
-
-                size_t pos;
-                while ((pos = buffer.find('\n')) != std::string::npos) {
-                    std::string line = buffer.substr(0, pos);
-                    buffer = buffer.substr(pos + 1);
-
-                    if (line == ".") {
-                        return;
-                    }
-                    std::cout << line << std::endl;
+                message.append(chunk, bytes);
+                
+                // Suche nach dem Ende der Nachricht
+                size_t pos = message.find("\n.\n");
+                if (pos != std::string::npos) {
+                    message = message.substr(0, pos);
+                    endFound = true;
                 }
             }
+
+            // Ausgabe der kompletten Nachricht
+            std::istringstream iss(message);
+            std::string line;
+            while (std::getline(iss, line)) {
+                std::cout << line << std::endl;
+            }
+
         } catch (const std::exception &e) {
             std::cerr << "Reading error: " << e.what() << std::endl;
         }
