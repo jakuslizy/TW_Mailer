@@ -130,14 +130,15 @@ public:
                 return;
             }
 
-            std::string header = "SEND\n" + receiver + "\n" + subject + "\n";
-            safeSend(header);
+            safeSend("SEND\n" + receiver + "\n" + subject + "\n");
 
             std::cout << "Message (end with a single '.' in a new line):\n";
             std::string line;
             while (std::getline(std::cin, line)) {
                 safeSend(line + "\n");
-                if (line == ".") break;
+                if (line == ".") {
+                    break;
+                }
             }
 
             std::string response = safeRead();
